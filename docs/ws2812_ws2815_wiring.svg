@@ -1,76 +1,172 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720">
+<svg xmlns="http://www.w3.org/2000/svg" width="1700" height="1050" viewBox="0 0 1700 1050">
   <defs>
     <style>
-      .bg { fill: #f8fafc; }
-      .box { fill: #ffffff; stroke: #0f172a; stroke-width: 3; rx: 10; }
-      .part { fill: #eef6ff; stroke: #1e3a8a; stroke-width: 2.5; rx: 8; }
-      .wire { fill: none; stroke: #111827; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
-      .red { stroke: #dc2626; stroke-width: 5; }
-      .green { stroke: #16a34a; stroke-width: 4; }
-      .blue { stroke: #2563eb; stroke-width: 4; }
-      .label { font-family: Arial, Helvetica, sans-serif; fill: #0f172a; font-size: 24px; font-weight: 700; }
-      .small { font-family: Arial, Helvetica, sans-serif; fill: #334155; font-size: 18px; }
-      .tiny { font-family: Arial, Helvetica, sans-serif; fill: #475569; font-size: 15px; }
+      .bg { fill: #ffffff; }
+      .wire { fill: none; stroke: #111827; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+      .vled { stroke: #dc2626; stroke-width: 4; }
+      .v5 { stroke: #f97316; stroke-width: 4; }
+      .gnd { stroke: #111827; stroke-width: 4; }
+      .sig { stroke: #2563eb; stroke-width: 3.5; }
+      .alt { stroke-dasharray: 9 7; opacity: .8; }
+      .box { fill: #f8fafc; stroke: #111827; stroke-width: 3; }
+      .module { fill: #eef6ff; stroke: #1e3a8a; stroke-width: 2.5; }
+      .optional { fill: #fffbea; stroke: #a16207; stroke-width: 2.5; stroke-dasharray: 9 6; }
+      .warn { fill: #fff7ed; stroke: #f97316; stroke-width: 2.5; }
+      .label { font-family: Arial, Helvetica, sans-serif; fill: #111827; font-size: 24px; font-weight: 700; }
+      .small { font-family: Arial, Helvetica, sans-serif; fill: #1f2937; font-size: 18px; }
+      .tiny { font-family: Arial, Helvetica, sans-serif; fill: #374151; font-size: 15px; }
+      .pin { font-family: Arial, Helvetica, sans-serif; fill: #111827; font-size: 16px; font-weight: 700; }
       .dot { fill: #111827; }
-      .led { fill: #fde047; stroke: #854d0e; stroke-width: 2; }
-      .warn { fill: #fff7ed; stroke: #f97316; stroke-width: 2.5; rx: 8; }
+      .terminal { fill: #ffffff; stroke: #111827; stroke-width: 2.5; }
     </style>
   </defs>
 
-  <rect class="bg" width="1200" height="720"/>
-  <text class="label" x="50" y="55">WS2812 / WS2815 RGB-Sequenzer Verdrahtung</text>
-  <text class="small" x="50" y="88">ESP32 steuert DIN, Netzteil versorgt den LED-Streifen. GND muss gemeinsam sein.</text>
+  <rect class="bg" width="1700" height="1050"/>
+  <text class="label" x="55" y="55">Schaltplan: ESP32 mit adressierbarem RGB-LED-Streifen</text>
+  <text class="small" x="55" y="88">WS2812B/SK6812: 5 V Streifenversorgung. WS2815: 12 V Streifenversorgung plus Step-Down auf 5 V fuer ESP32/Logik.</text>
 
-  <rect class="box" x="70" y="160" width="230" height="250"/>
-  <text class="label" x="140" y="200">ESP32</text>
-  <text class="small" x="105" y="242">GPIO 16</text>
-  <text class="small" x="105" y="285">GND</text>
-  <text class="small" x="105" y="328">5V/VIN</text>
+  <!-- Main rails -->
+  <path class="wire vled" d="M350 190 H1520"/>
+  <path class="wire v5" d="M740 360 H1375"/>
+  <path class="wire gnd" d="M350 790 H1520"/>
+  <text class="small" x="1450" y="170">+V LED</text>
+  <text class="small" x="1305" y="340">+5 V Logik</text>
+  <text class="small" x="1455" y="820">GND</text>
 
-  <rect class="box" x="760" y="145" width="330" height="290"/>
-  <text class="label" x="815" y="185">LED-Streifen</text>
-  <text class="small" x="805" y="225">WS2812B: +5V, GND, DIN</text>
-  <text class="small" x="805" y="255">WS2815: +12V, GND, DIN</text>
-  <g transform="translate(810 310)">
-    <circle class="led" cx="0" cy="0" r="18"/>
-    <circle class="led" cx="48" cy="0" r="18"/>
-    <circle class="led" cx="96" cy="0" r="18"/>
-    <circle class="led" cx="144" cy="0" r="18"/>
-    <circle class="led" cx="192" cy="0" r="18"/>
-  </g>
-  <text class="small" x="805" y="390">DIN am Anfang des Streifens</text>
+  <!-- Power supply -->
+  <rect class="box" x="70" y="145" width="250" height="190" rx="8"/>
+  <text class="label" x="112" y="190">Netzteil</text>
+  <text class="small" x="105" y="228">5 V fuer WS2812B</text>
+  <text class="small" x="105" y="258">12 V fuer WS2815</text>
+  <text class="tiny" x="105" y="292">Strom passend zur LED-Anzahl</text>
+  <circle class="terminal" cx="320" cy="190" r="10"/>
+  <circle class="terminal" cx="320" cy="790" r="10"/>
+  <text class="pin" x="278" y="196">+V</text>
+  <text class="pin" x="273" y="796">GND</text>
+  <path class="wire vled" d="M330 190 H350"/>
+  <path class="wire gnd" d="M330 790 H350"/>
 
-  <rect class="box" x="440" y="480" width="300" height="105"/>
-  <text class="label" x="480" y="522">Netzteil</text>
-  <text class="small" x="480" y="555">5 V fuer WS2812B</text>
-  <text class="small" x="480" y="580">12 V fuer WS2815</text>
+  <!-- Fuse -->
+  <rect class="box" x="430" y="165" width="115" height="50" rx="4"/>
+  <text class="pin" x="466" y="196">F1</text>
+  <text class="tiny" x="420" y="235">Sicherung nahe Netzteil</text>
+  <path class="wire vled" d="M350 190 H430"/>
+  <path class="wire vled" d="M545 190 H1520"/>
 
-  <rect class="part" x="95" y="510" width="230" height="85"/>
-  <text class="label" x="125" y="548">Step-Down</text>
-  <text class="small" x="126" y="576">12 V auf 5 V fuer ESP32</text>
+  <!-- Bulk capacitor -->
+  <text class="small" x="1130" y="105">C1 1000 uF</text>
+  <text class="tiny" x="1110" y="130">nahe am Streifenanfang</text>
+  <path class="wire vled" d="M1160 190 V250"/>
+  <line x1="1128" y1="250" x2="1192" y2="250" stroke="#111827" stroke-width="4"/>
+  <line x1="1142" y1="265" x2="1178" y2="265" stroke="#111827" stroke-width="4"/>
+  <path class="wire gnd" d="M1160 265 V790"/>
+  <circle class="dot" cx="1160" cy="190" r="6"/>
+  <circle class="dot" cx="1160" cy="790" r="6"/>
+  <text class="pin" x="1198" y="253">+</text>
+  <text class="pin" x="1198" y="274">-</text>
 
-  <rect class="part" x="430" y="215" width="150" height="50"/>
-  <text class="small" x="458" y="247">330 Ohm</text>
+  <!-- LED strip connector -->
+  <rect class="box" x="1285" y="135" width="285" height="220" rx="8"/>
+  <text class="label" x="1353" y="178">LED-Streifen</text>
+  <text class="small" x="1322" y="213">WS2812B/SK6812: +5 V</text>
+  <text class="small" x="1322" y="242">WS2815: +12 V</text>
+  <circle class="terminal" cx="1285" cy="190" r="9"/>
+  <circle class="terminal" cx="1285" cy="275" r="9"/>
+  <circle class="terminal" cx="1285" cy="325" r="9"/>
+  <text class="pin" x="1306" y="196">+V</text>
+  <text class="pin" x="1306" y="281">DIN</text>
+  <text class="pin" x="1306" y="331">GND</text>
+  <path class="wire vled" d="M1285 190 H1520"/>
+  <path class="wire gnd" d="M1285 325 V790"/>
+  <circle class="dot" cx="1285" cy="190" r="6"/>
+  <circle class="dot" cx="1285" cy="790" r="6"/>
 
-  <path class="wire blue" d="M300 240 L430 240"/>
-  <path class="wire blue" d="M580 240 L760 240"/>
-  <text class="tiny" x="455" y="205">Datenleitung</text>
+  <!-- Buck converter -->
+  <rect class="module" x="470" y="300" width="240" height="190" rx="8"/>
+  <text class="label" x="505" y="345">Step-Down</text>
+  <text class="small" x="500" y="378">12 V auf 5 V</text>
+  <text class="tiny" x="500" y="407">bei 5-V-Netzteil optional</text>
+  <circle class="terminal" cx="470" cy="330" r="9"/>
+  <circle class="terminal" cx="470" cy="455" r="9"/>
+  <circle class="terminal" cx="710" cy="360" r="9"/>
+  <circle class="terminal" cx="710" cy="455" r="9"/>
+  <text class="pin" x="486" y="335">VIN+</text>
+  <text class="pin" x="486" y="460">VIN-</text>
+  <text class="pin" x="650" y="365">5V+</text>
+  <text class="pin" x="656" y="460">GND</text>
+  <path class="wire vled" d="M570 190 V330 H479"/>
+  <path class="wire gnd" d="M570 790 V455 H479"/>
+  <path class="wire v5" d="M719 360 H740"/>
+  <path class="wire gnd" d="M719 455 H760 V790"/>
+  <circle class="dot" cx="570" cy="190" r="6"/>
+  <circle class="dot" cx="570" cy="790" r="6"/>
+  <circle class="dot" cx="760" cy="790" r="6"/>
 
-  <path class="wire red" d="M590 480 L590 430 L760 430"/>
-  <path class="wire" d="M590 585 L590 465 L760 465"/>
-  <text class="small" x="805" y="432">+V</text>
-  <text class="small" x="805" y="470">GND</text>
+  <!-- 5V direct option -->
+  <path class="wire v5 alt" d="M620 190 V270 H740 V360"/>
+  <text class="tiny" x="635" y="252">Bei 5-V-Netzteil: +5 V direkt auf Logik-5V moeglich</text>
 
-  <path class="wire" d="M300 285 L590 465"/>
-  <circle class="dot" cx="590" cy="465" r="6"/>
-  <text class="tiny" x="338" y="318">Gemeinsamer GND</text>
+  <!-- ESP32 -->
+  <rect class="module" x="820" y="500" width="280" height="210" rx="8"/>
+  <text class="label" x="902" y="545">ESP32</text>
+  <text class="small" x="867" y="578">DevKit / WROOM-32</text>
+  <circle class="terminal" cx="820" cy="610" r="9"/>
+  <circle class="terminal" cx="820" cy="670" r="9"/>
+  <circle class="terminal" cx="1100" cy="595" r="9"/>
+  <text class="pin" x="845" y="616">5V / VIN</text>
+  <text class="pin" x="845" y="676">GND</text>
+  <text class="pin" x="1012" y="601">GPIO16</text>
+  <path class="wire v5" d="M790 360 V610 H811"/>
+  <path class="wire gnd" d="M790 790 V670 H811"/>
+  <circle class="dot" cx="790" cy="360" r="6"/>
+  <circle class="dot" cx="790" cy="790" r="6"/>
 
-  <path class="wire red" d="M590 480 L210 510"/>
-  <path class="wire" d="M590 585 L210 595"/>
-  <path class="wire red" d="M210 510 L210 328 L300 328"/>
-  <path class="wire" d="M210 595 L210 285 L300 285"/>
-  <text class="tiny" x="230" y="503">nur bei 12-V-Projekt</text>
+  <!-- Level shifter -->
+  <rect class="optional" x="1195" y="495" width="250" height="190" rx="8"/>
+  <text class="label" x="1227" y="538">74AHCT125</text>
+  <text class="small" x="1233" y="570">optional, empfohlen</text>
+  <circle class="terminal" cx="1195" cy="595" r="9"/>
+  <circle class="terminal" cx="1445" cy="595" r="9"/>
+  <circle class="terminal" cx="1250" cy="685" r="9"/>
+  <circle class="terminal" cx="1320" cy="685" r="9"/>
+  <circle class="terminal" cx="1390" cy="685" r="9"/>
+  <text class="pin" x="1212" y="601">IN</text>
+  <text class="pin" x="1398" y="601">OUT</text>
+  <text class="pin" x="1230" y="715">/OE</text>
+  <text class="pin" x="1300" y="715">GND</text>
+  <text class="pin" x="1377" y="715">VCC</text>
+  <path class="wire sig" d="M1109 595 H1186"/>
+  <path class="wire gnd" d="M1250 685 V790"/>
+  <path class="wire gnd" d="M1320 685 V790"/>
+  <path class="wire v5" d="M1390 685 V360"/>
+  <circle class="dot" cx="1250" cy="790" r="6"/>
+  <circle class="dot" cx="1320" cy="790" r="6"/>
+  <circle class="dot" cx="1390" cy="360" r="6"/>
 
-  <rect class="warn" x="70" y="635" width="1010" height="48"/>
-  <text class="small" x="92" y="666">Wichtig: ESP32 nie direkt an 12 V anschliessen. Bei langen Streifen Plus/GND mehrfach einspeisen und Sicherung verwenden.</text>
+  <!-- Data resistor and DIN -->
+  <rect class="box" x="1490" y="570" width="100" height="50" rx="4"/>
+  <text class="pin" x="1508" y="601">R1 330 Ω</text>
+  <text class="tiny" x="1464" y="642">nahe am Streifen-DIN</text>
+  <path class="wire sig" d="M1454 595 H1490"/>
+  <path class="wire sig" d="M1590 595 H1625 V275 H1294"/>
+
+  <!-- Bypass without level shifter -->
+  <path class="wire sig alt" d="M1109 635 H1490"/>
+  <text class="tiny" x="1138" y="662">Alternative ohne Pegelwandler: GPIO16 direkt zu R1</text>
+
+  <!-- Decoupling cap for level shifter -->
+  <text class="tiny" x="1210" y="450">C2 100 nF nahe 74AHCT125 zwischen VCC und GND</text>
+  <path class="wire v5" d="M1515 360 V430"/>
+  <line x1="1489" y1="430" x2="1541" y2="430" stroke="#111827" stroke-width="3"/>
+  <line x1="1497" y1="444" x2="1533" y2="444" stroke="#111827" stroke-width="3"/>
+  <path class="wire gnd" d="M1515 444 V790"/>
+  <circle class="dot" cx="1515" cy="360" r="5"/>
+  <circle class="dot" cx="1515" cy="790" r="5"/>
+
+  <!-- Notes -->
+  <rect class="warn" x="70" y="875" width="1530" height="125" rx="8"/>
+  <text class="label" x="95" y="915">Wichtige Hinweise</text>
+  <text class="small" x="95" y="950">1. ESP32 nie direkt an 12 V. Bei WS2815: 12 V nur fuer den Streifen, ESP32/74AHCT125 ueber 5-V-Step-Down.</text>
+  <text class="small" x="95" y="980">2. GND von Netzteil, Streifen, ESP32, Step-Down und Pegelwandler ist ein gemeinsamer Knoten.</text>
+  <text class="small" x="760" y="980">3. Bei langen Streifen +V/GND mehrfach einspeisen.</text>
 </svg>
