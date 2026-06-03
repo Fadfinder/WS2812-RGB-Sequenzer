@@ -1,0 +1,810 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RGB LED-Streifen Simulation</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color: #172033; background: #eef2f7; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #eef2f7; color: #172033; }
+    main { display: grid; grid-template-columns: 280px 1fr 340px; min-height: 100vh; }
+    aside, section { padding: 18px; }
+    aside { background: #182235; color: #f8fafc; }
+    h1 { font-size: 22px; margin: 0 0 18px; }
+    h2 { font-size: 18px; margin: 0 0 12px; }
+    h3 { font-size: 15px; margin: 18px 0 8px; }
+    button, input, select { font: inherit; }
+    button { border: 0; border-radius: 7px; padding: 9px 11px; font-weight: 700; cursor: pointer; background: #dbe4f0; color: #172033; }
+    button.primary { background: #22c55e; color: #052e16; }
+    button.danger { background: #f97316; color: #431407; }
+    button.ghost { background: #2a3650; color: #f8fafc; }
+    button.icon { width: 36px; height: 36px; padding: 0; }
+    input, select { width: 100%; border: 1px solid #cbd5e1; border-radius: 7px; padding: 9px; background: #fff; color: #172033; }
+    .seq-list { display: grid; gap: 8px; }
+    .seq-item { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; padding: 10px; border-radius: 8px; background: #26334b; color: #f8fafc; cursor: pointer; }
+    .seq-item.active { outline: 3px solid #38bdf8; background: #31415d; }
+    .seq-meta { color: #cbd5e1; font-size: 13px; margin-top: 3px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .panel { background: #fff; border: 1px solid #d7dee8; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(30px, 1fr)); gap: 8px; max-height: 270px; overflow: auto; padding: 10px; background: #0f172a; border-radius: 8px; }
+    .pixel { aspect-ratio: 1; border-radius: 50%; background: #1f2937; border: 2px solid #334155; color: #94a3b8; display: grid; place-items: center; font-size: 11px; font-weight: 800; }
+    .pixel.on { color: #fff; border-color: rgba(255,255,255,.78); box-shadow: 0 0 14px currentColor; }
+    .led-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 8px; max-height: 300px; overflow: auto; padding: 2px; }
+    .led-btn { min-height: 42px; border: 2px solid #cbd5e1; background: #f8fafc; }
+    .led-btn.on { color: #fff; border-color: #111827; }
+    .steps { display: grid; gap: 8px; }
+    .step { display: grid; grid-template-columns: 1fr auto repeat(5, auto); gap: 8px; align-items: center; padding: 10px; background: #f8fafc; border: 1px solid #d7dee8; border-radius: 8px; }
+    .step.active { outline: 3px solid #38bdf8; }
+    .effects { display: grid; gap: 8px; }
+    .effect { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 9px; background: #f8fafc; border: 1px solid #d7dee8; border-radius: 8px; }
+    .status { min-height: 24px; color: #166534; font-weight: 800; }
+    .muted { color: #64748b; font-size: 14px; }
+    .swatch { display: inline-block; width: 18px; height: 18px; border-radius: 4px; border: 1px solid #475569; vertical-align: middle; margin-right: 6px; }
+    @media (max-width: 980px) { main { grid-template-columns: 1fr; } aside { order: 1; } section { order: 2; } }
+  </style>
+</head>
+<body>
+<main>
+  <aside>
+    <h1>RGB Simulation</h1>
+    <div class="seq-list" id="sequenceList"></div>
+    <h3>Playlist</h3>
+    <div class="row">
+      <button class="ghost" onclick="addSequence()">Neu</button>
+      <button class="ghost" onclick="moveSequence(-1)">Hoch</button>
+      <button class="ghost" onclick="moveSequence(1)">Runter</button>
+      <button class="danger" onclick="deleteSequence()">Loeschen</button>
+    </div>
+  </aside>
+
+  <section>
+    <div class="panel">
+      <h2>Simulierter LED-Streifen</h2>
+      <div class="strip" id="strip"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Streifen</h2>
+      <div class="row">
+        <label style="width: 180px">Anzahl LEDs
+          <input id="ledCountInput" type="number" min="1" max="300" value="60" onchange="changeLedCount()">
+        </label>
+        <button onclick="paintAll()">Alle mit Farbe setzen</button>
+        <button onclick="clearPaint()">Alle aus</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Sequenz bearbeiten</h2>
+      <div class="row">
+        <label style="flex: 1 1 260px">Name
+          <input id="seqName" oninput="updateSequenceMeta()">
+        </label>
+        <label style="width: 170px">Dauer Sequenz
+          <input id="seqDuration" type="number" min="0.1" step="0.1" oninput="updateSequenceMeta()">
+        </label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>LEDs und Farbe fuer den Schritt</h2>
+      <div class="led-grid" id="ledGrid"></div>
+      <div class="row" style="margin-top: 12px">
+        <label style="width: 120px">Farbe
+          <input id="stepColor" type="color" value="#ff0000" oninput="liveCurrentStep()">
+        </label>
+        <label style="width: 170px">Schrittdauer Sekunden
+          <input id="stepSeconds" type="number" min="0.02" step="0.1" value="1" oninput="liveCurrentStep()">
+        </label>
+        <button class="primary" onclick="saveStep()">Schritt speichern</button>
+        <button onclick="newStep()">Neuer Schritt</button>
+        <button onclick="pasteStep()">Kopierten Schritt einfuegen</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Effekt fuer LED-Gruppe</h2>
+      <div class="row">
+        <label style="width: 180px">LEDs
+          <input id="effectLeds" value="1-20">
+        </label>
+        <label style="width: 180px">Effekt
+          <select id="effectType">
+            <option value="fire">Feuerflackern</option>
+            <option value="storm">Gewitter</option>
+            <option value="rainbow">Regenbogen</option>
+            <option value="welder">Schweisserlicht</option>
+            <option value="camera">Fotografen-Blitz</option>
+            <option value="police">Polizei-Blitzer</option>
+            <option value="sparkle">Funkeln</option>
+            <option value="comet">Komet</option>
+            <option value="theater">Theater-Lauflicht</option>
+            <option value="pulse">Pulsieren</option>
+            <option value="breathe">Atmen</option>
+            <option value="lava">Lava</option>
+            <option value="ocean">Ozean</option>
+            <option value="forest">Wald</option>
+            <option value="meteor">Meteor</option>
+            <option value="twinkle">Sternfunkeln</option>
+            <option value="candle">Kerze</option>
+            <option value="sunrise">Sonnenaufgang</option>
+            <option value="sunset">Sonnenuntergang</option>
+            <option value="scanner">Scanner</option>
+            <option value="confetti">Konfetti</option>
+            <option value="aurora">Aurora</option>
+            <option value="toxic">Giftgruen</option>
+            <option value="heartbeat">Herzschlag</option>
+          </select>
+        </label>
+        <label style="width: 150px">Geschwindigkeit
+          <input id="effectSpeed" type="number" min="0.1" max="10" step="0.1" value="1">
+        </label>
+        <label style="width: 120px">Effektfarbe
+          <input id="effectColor" type="color" value="#ffffff">
+        </label>
+        <button onclick="addEffect()">Effekt hinzufuegen</button>
+      </div>
+      <div class="effects" id="effects"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Schritte dieser Sequenz</h2>
+      <div class="steps" id="steps"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="panel">
+      <h2>Simulation</h2>
+      <div class="row">
+        <button class="primary" onclick="play()">Abspielen</button>
+        <button onclick="stop()">Stop</button>
+        <button onclick="saveLocal()">Im Browser speichern</button>
+      </div>
+      <p id="status" class="status"></p>
+      <p class="muted">Diese Datei simuliert die spaetere ESP32-Weboberflaeche lokal im Browser. Deine Daten werden nur im Browser gespeichert.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+const MAX_LEDS = 300;
+let ledCount = 60;
+let playlist = [];
+let selectedSequence = 0;
+let selectedStep = -1;
+let paintedColors = new Map();
+let currentEffects = [];
+let copiedStep = null;
+let playTimer = null;
+let animationTimer = null;
+let playing = false;
+
+const sequenceList = document.getElementById('sequenceList');
+const ledGrid = document.getElementById('ledGrid');
+const strip = document.getElementById('strip');
+const stepsEl = document.getElementById('steps');
+const effectsEl = document.getElementById('effects');
+const seqName = document.getElementById('seqName');
+const seqDuration = document.getElementById('seqDuration');
+const stepSeconds = document.getElementById('stepSeconds');
+const stepColor = document.getElementById('stepColor');
+const effectLeds = document.getElementById('effectLeds');
+const effectType = document.getElementById('effectType');
+const effectSpeed = document.getElementById('effectSpeed');
+const effectColor = document.getElementById('effectColor');
+const statusEl = document.getElementById('status');
+const ledCountInput = document.getElementById('ledCountInput');
+
+function defaultPlaylist() {
+  return [
+    { name: 'Lauflicht Rot', durationMs: 10000, steps: Array.from({ length: 10 }, (_, i) => ({ durationMs: 1000, groups: [{ leds: `${i + 1}`, color: '#ff0000' }], effects: [] })) },
+    { name: 'Mehrfarbig', durationMs: 20000, steps: [
+      { durationMs: 10000, groups: [{ leds: '1-10', color: '#ff0000' }, { leds: '11-20', color: '#0000ff' }], effects: [] },
+      { durationMs: 10000, groups: [{ leds: '1,3,5,7,9', color: '#00ff00' }, { leds: '2,4,6,8,10', color: '#ff00ff' }], effects: [{ leds: '21-35', type: 'fire', speed: 1, color: '#ffffff' }] }
+    ] }
+  ];
+}
+
+function normalizeStep(step) {
+  if (Array.isArray(step.groups)) return step;
+  return { durationMs: step.durationMs || 1000, groups: [{ leds: step.leds || '', color: step.color || '#ff0000' }], effects: [] };
+}
+
+function stepText(step) {
+  step = normalizeStep(step);
+  if (!Array.isArray(step.effects)) step.effects = [];
+  const colors = step.groups.map(group => `${group.color} LEDs ${group.leds || 'keine'}`);
+  const effects = step.effects.map(effect => `${effectName(effect.type)} LEDs ${effect.leds} x${effect.speed || 1}${usesEffectColor(effect.type) ? ` ${effect.color || '#ffffff'}` : ''}`);
+  return [...colors, ...effects].join(' / ');
+}
+
+function mapFromGroups(groups) {
+  const colors = new Map();
+  for (const group of groups) {
+    for (const led of expandSelection(group.leds)) colors.set(led, group.color.toLowerCase());
+  }
+  return colors;
+}
+
+function groupsFromMap(colors) {
+  const byColor = new Map();
+  for (const [led, color] of colors) {
+    if (!byColor.has(color)) byColor.set(color, []);
+    byColor.get(color).push(led);
+  }
+  return [...byColor.entries()].map(([color, leds]) => ({ color, leds: compactNumbers(leds) }));
+}
+
+function effectName(type) {
+  return ({
+    fire: 'Feuerflackern',
+    storm: 'Gewitter',
+    rainbow: 'Regenbogen',
+    welder: 'Schweisserlicht',
+    camera: 'Fotografen-Blitz',
+    police: 'Polizei-Blitzer',
+    sparkle: 'Funkeln',
+    comet: 'Komet',
+    theater: 'Theater-Lauflicht',
+    pulse: 'Pulsieren',
+    breathe: 'Atmen',
+    lava: 'Lava',
+    ocean: 'Ozean',
+    forest: 'Wald',
+    meteor: 'Meteor',
+    twinkle: 'Sternfunkeln',
+    candle: 'Kerze',
+    sunrise: 'Sonnenaufgang',
+    sunset: 'Sonnenuntergang',
+    scanner: 'Scanner',
+    confetti: 'Konfetti',
+    aurora: 'Aurora',
+    toxic: 'Giftgruen',
+    heartbeat: 'Herzschlag'
+  })[type] || type;
+}
+
+function hexColor(r, g, b) {
+  return `#${[r, g, b].map(v => clamp(Math.round(v), 0, 255).toString(16).padStart(2, '0')).join('')}`;
+}
+
+function rgbFromHex(color) {
+  const hex = String(color || '#ffffff').replace('#', '').padEnd(6, 'f').slice(0, 6);
+  return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
+}
+
+function scaleColor(color, factor) {
+  const [r, g, b] = rgbFromHex(color);
+  return hexColor(r * factor, g * factor, b * factor);
+}
+
+function usesEffectColor(type) {
+  return ['sparkle', 'comet', 'theater', 'pulse', 'breathe', 'meteor', 'twinkle', 'scanner', 'heartbeat'].includes(type);
+}
+
+function hsvToHex(h, s, v) {
+  const c = v * s;
+  const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+  const m = v - c;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  return hexColor((r + m) * 255, (g + m) * 255, (b + m) * 255);
+}
+
+function colorForEffect(type, led, frame, chosenColor = '#ffffff') {
+  if (type === 'fire') {
+    const heat = 120 + Math.random() * 135;
+    const green = 18 + Math.random() * 95;
+    return hexColor(heat, green, Math.random() * 8);
+  }
+  if (type === 'storm') {
+    const flash = Math.random() > 0.93;
+    if (flash) return Math.random() > 0.35 ? '#ffffff' : '#9fd8ff';
+    const pulse = 18 + Math.random() * 42;
+    return hexColor(pulse * 0.35, pulse * 0.55, pulse);
+  }
+  if (type === 'rainbow') {
+    return hsvToHex((frame * 7 + led * 13) % 360, 0.95, 1);
+  }
+  if (type === 'welder') {
+    const burst = Math.sin(frame * 0.9) > 0.35 || Math.random() > 0.78;
+    if (!burst) return '#020611';
+    const white = 180 + Math.random() * 75;
+    return Math.random() > 0.28 ? hexColor(120 + Math.random() * 80, 180 + Math.random() * 75, white) : '#ffffff';
+  }
+  if (type === 'camera') {
+    const phase = frame % 42;
+    if (phase < 1.2) return '#ffffff';
+    if (phase < 2.6) return '#b9d7ff';
+    if (phase < 5.5) return '#1b263a';
+    return '#000000';
+  }
+  if (type === 'police') {
+    const phase = Math.floor(frame / 3) % 4;
+    return phase < 2 ? '#ff0028' : '#006dff';
+  }
+  if (type === 'sparkle') {
+    return Math.random() > 0.82 ? chosenColor : '#060606';
+  }
+  if (type === 'comet') {
+    const head = frame % ledCount;
+    const d = Math.abs(led - head);
+    const glow = Math.max(0, 1 - d / 7);
+    return scaleColor(chosenColor, glow);
+  }
+  if (type === 'theater') {
+    return ((led + Math.floor(frame / 2)) % 3 === 0) ? chosenColor : '#000000';
+  }
+  if (type === 'pulse') {
+    const v = 0.18 + 0.82 * ((Math.sin(frame / 4) + 1) / 2);
+    return scaleColor(chosenColor, v);
+  }
+  if (type === 'breathe') {
+    const v = Math.pow((Math.sin(frame / 7) + 1) / 2, 1.8);
+    return scaleColor(chosenColor, v);
+  }
+  if (type === 'lava') {
+    const v = (Math.sin(frame / 3 + led * 0.55) + 1) / 2;
+    return hexColor(120 + 135 * v, 18 + 62 * v, 0);
+  }
+  if (type === 'ocean') {
+    const v = (Math.sin(frame / 5 + led * 0.35) + 1) / 2;
+    return hexColor(0, 45 + 80 * v, 110 + 145 * v);
+  }
+  if (type === 'forest') {
+    const v = (Math.sin(frame / 6 + led * 0.41) + 1) / 2;
+    return hexColor(2 + 18 * v, 55 + 120 * v, 12 + 38 * v);
+  }
+  if (type === 'meteor') {
+    const head = (frame * 1.6) % ledCount;
+    const d = Math.abs(led - head);
+    const glow = Math.max(0, 1 - d / 9);
+    return scaleColor(chosenColor, glow);
+  }
+  if (type === 'twinkle') {
+    const base = (Math.sin(frame * 0.7 + led * 2.17) + 1) / 2;
+    const flash = Math.random() > 0.96 ? 1 : base * 0.28;
+    return scaleColor(chosenColor, flash);
+  }
+  if (type === 'candle') {
+    const v = 0.55 + Math.random() * 0.45;
+    return hexColor(255 * v, (105 + Math.random() * 55) * v, 18 * v);
+  }
+  if (type === 'sunrise') {
+    const v = (Math.sin(frame / 12) + 1) / 2;
+    return hexColor(110 + 145 * v, 35 + 130 * v, 55 + 45 * v);
+  }
+  if (type === 'sunset') {
+    const v = (Math.sin(frame / 11 + 1.6) + 1) / 2;
+    return hexColor(255 * v, 95 * v, 12 + 70 * (1 - v));
+  }
+  if (type === 'scanner') {
+    const span = Math.max(1, ledCount - 1);
+    const pos = Math.abs((frame * 1.4 % (span * 2)) - span) + 1;
+    const d = Math.abs(led - pos);
+    const glow = Math.max(0, 1 - d / 5);
+    return scaleColor(chosenColor, glow);
+  }
+  if (type === 'confetti') {
+    return Math.random() > 0.72 ? hsvToHex(Math.random() * 360, 0.9, 1) : '#000000';
+  }
+  if (type === 'aurora') {
+    const hue = 135 + 75 * ((Math.sin(frame / 8 + led * 0.31) + 1) / 2);
+    const v = 0.35 + 0.65 * ((Math.sin(frame / 5 + led * 0.13) + 1) / 2);
+    return hsvToHex(hue, 0.85, v);
+  }
+  if (type === 'toxic') {
+    const v = Math.random() > 0.9 ? 1 : 0.45 + 0.45 * ((Math.sin(frame / 2 + led) + 1) / 2);
+    return hexColor(80 * v, 255 * v, 0);
+  }
+  if (type === 'heartbeat') {
+    const phase = frame % 24;
+    const beat = phase < 2 || (phase > 5 && phase < 8) ? 1 : Math.max(0, 1 - (phase - 8) / 16);
+    return scaleColor(chosenColor, beat);
+  }
+  return '#000000';
+}
+
+function applyEffectsToColors(colors, effects, frame) {
+  for (const effect of effects || []) {
+    for (const led of expandSelection(effect.leds)) {
+      colors.set(led, colorForEffect(effect.type, led, frame * (Number(effect.speed) || 1), effect.color || '#ffffff'));
+    }
+  }
+  return colors;
+}
+
+function render() {
+  ledCountInput.value = ledCount;
+  selectedSequence = clamp(selectedSequence, 0, playlist.length - 1);
+  const seq = playlist[selectedSequence];
+  if (selectedStep >= seq.steps.length) selectedStep = seq.steps.length - 1;
+
+  sequenceList.innerHTML = '';
+  playlist.forEach((item, index) => {
+    const el = document.createElement('div');
+    el.className = `seq-item ${index === selectedSequence ? 'active' : ''}`;
+    el.onclick = () => selectSequence(index);
+    el.innerHTML = `<div><strong>${escapeHtml(item.name || 'Sequenz')}</strong><div class="seq-meta">${msToSeconds(item.durationMs)} s, ${item.steps.length} Schritte</div></div><div>${index + 1}</div>`;
+    sequenceList.appendChild(el);
+  });
+
+  seqName.value = seq.name || '';
+  seqDuration.value = msToSeconds(seq.durationMs);
+  renderLedGrid();
+  renderStrip();
+  renderEffects();
+  renderSteps();
+  updateEditAnimation();
+}
+
+function colorMapFromGroups(groups) {
+  const colors = new Map();
+  for (const group of groups) {
+    for (const led of expandSelection(group.leds)) colors.set(led, group.color);
+  }
+  return colors;
+}
+
+function renderStrip(step = currentStepDraft(), frame = Date.now() / 80) {
+  step = normalizeStep(step);
+  const colors = applyEffectsToColors(colorMapFromGroups(step.groups), step.effects, frame);
+  strip.innerHTML = '';
+  for (let i = 1; i <= ledCount; i++) {
+    const pixel = document.createElement('div');
+    const color = colors.get(i);
+    pixel.className = `pixel ${color ? 'on' : ''}`;
+    pixel.textContent = i;
+    if (color) {
+      pixel.style.background = color;
+      pixel.style.color = color;
+    }
+    strip.appendChild(pixel);
+  }
+}
+
+function updateEditAnimation() {
+  if (playing) return;
+  clearInterval(animationTimer);
+  if (!currentEffects.length) return;
+  animationTimer = setInterval(() => renderStrip(), 90);
+}
+
+function currentStepDraft() {
+  return { durationMs: secondsToMs(stepSeconds.value, 1), groups: groupsFromMap(paintedColors), effects: currentEffects };
+}
+
+function renderLedGrid() {
+  ledGrid.innerHTML = '';
+  for (let i = 1; i <= ledCount; i++) {
+    const button = document.createElement('button');
+    const color = paintedColors.get(i);
+    button.className = `led-btn ${color ? 'on' : ''}`;
+    button.textContent = i;
+    if (color) button.style.background = color;
+    button.onclick = () => toggleLed(i);
+    ledGrid.appendChild(button);
+  }
+}
+
+function renderSteps() {
+  const seq = playlist[selectedSequence];
+  stepsEl.innerHTML = '';
+  seq.steps.forEach((step, index) => {
+    step = normalizeStep(step);
+    const row = document.createElement('div');
+    row.className = `step ${index === selectedStep ? 'active' : ''}`;
+    row.onclick = () => loadStep(index);
+    row.innerHTML = `
+      <div><strong>Schritt ${index + 1}</strong><div class="muted">${escapeHtml(stepText(step))}</div></div>
+      <div>${msToSeconds(step.durationMs)} s</div>
+      <button class="icon" onclick="event.stopPropagation(); copyStep(${index})">⧉</button>
+      <button class="icon" onclick="event.stopPropagation(); pasteStep(${index})">＋</button>
+      <button class="icon" onclick="event.stopPropagation(); moveStep(${index}, -1)">↑</button>
+      <button class="icon" onclick="event.stopPropagation(); moveStep(${index}, 1)">↓</button>
+      <button class="danger" onclick="event.stopPropagation(); deleteStep(${index})">X</button>`;
+    stepsEl.appendChild(row);
+  });
+}
+
+function renderEffects() {
+  effectsEl.innerHTML = '';
+  if (!currentEffects.length) {
+    effectsEl.innerHTML = '<div class="muted">Noch kein Effekt im aktuellen Schritt.</div>';
+    return;
+  }
+  currentEffects.forEach((effect, index) => {
+    const row = document.createElement('div');
+    row.className = 'effect';
+    const colorText = usesEffectColor(effect.type) ? `, Farbe ${effect.color || '#ffffff'}` : '';
+    row.innerHTML = `<div><strong>${effectName(effect.type)}</strong><div class="muted">LEDs ${escapeHtml(effect.leds || 'keine')}, Geschwindigkeit x${effect.speed || 1}${colorText}</div></div><button class="danger" onclick="deleteEffect(${index})">X</button>`;
+    effectsEl.appendChild(row);
+  });
+}
+
+function selectSequence(index) {
+  stop();
+  selectedSequence = index;
+  selectedStep = -1;
+  paintedColors.clear();
+  currentEffects = [];
+  render();
+}
+
+function changeLedCount() {
+  ledCount = clamp(parseInt(ledCountInput.value, 10) || 60, 1, MAX_LEDS);
+  paintedColors = new Map([...paintedColors].filter(([led]) => led <= ledCount));
+  currentEffects = currentEffects.map(effect => ({ ...effect, leds: compactNumbers([...expandSelection(effect.leds)].filter(led => led <= ledCount)) }));
+  render();
+}
+
+function updateSequenceMeta() {
+  const seq = playlist[selectedSequence];
+  seq.name = seqName.value;
+  seq.durationMs = secondsToMs(seqDuration.value, 10);
+  render();
+}
+
+function toggleLed(index) {
+  const color = stepColor.value.toLowerCase();
+  if (paintedColors.get(index) === color) paintedColors.delete(index);
+  else paintedColors.set(index, color);
+  renderLedGrid();
+  renderStrip();
+}
+
+function paintAll() {
+  const color = stepColor.value.toLowerCase();
+  for (let i = 1; i <= ledCount; i++) paintedColors.set(i, color);
+  renderLedGrid();
+  renderStrip();
+}
+
+function clearPaint() {
+  paintedColors.clear();
+  renderLedGrid();
+  renderStrip();
+}
+
+function liveCurrentStep() {
+  // Changing the color input only changes the brush, not already painted LEDs.
+}
+
+function newStep() {
+  stop();
+  const seq = playlist[selectedSequence];
+  const insertAt = selectedStep >= 0 ? selectedStep + 1 : seq.steps.length;
+  seq.steps.splice(insertAt, 0, { durationMs: 1000, groups: [], effects: [] });
+  loadStep(insertAt);
+  statusEl.textContent = `Neuer Schritt ${insertAt + 1} angelegt`;
+}
+
+function saveStep() {
+  const seq = playlist[selectedSequence];
+  const step = { durationMs: secondsToMs(stepSeconds.value, 1), groups: groupsFromMap(paintedColors), effects: currentEffects.map(effect => ({ ...effect })) };
+  if (selectedStep >= 0) seq.steps[selectedStep] = step;
+  else {
+    seq.steps.push(step);
+    selectedStep = seq.steps.length - 1;
+  }
+  render();
+}
+
+function loadStep(index) {
+  stop();
+  const step = normalizeStep(playlist[selectedSequence].steps[index]);
+  selectedStep = index;
+  paintedColors = mapFromGroups(step.groups);
+  currentEffects = Array.isArray(step.effects) ? step.effects.map(effect => ({ ...effect })) : [];
+  stepColor.value = step.groups[0]?.color || '#ff0000';
+  stepSeconds.value = msToSeconds(step.durationMs);
+  render();
+}
+
+function addEffect() {
+  const leds = compactNumbers([...expandSelection(effectLeds.value)]);
+  if (!leds) return;
+  currentEffects.push({ leds, type: effectType.value, speed: clamp(parseFloat(String(effectSpeed.value).replace(',', '.')) || 1, 0.1, 10), color: effectColor.value });
+  render();
+}
+
+function deleteEffect(index) {
+  currentEffects.splice(index, 1);
+  render();
+}
+
+function deleteStep(index) {
+  playlist[selectedSequence].steps.splice(index, 1);
+  selectedStep = -1;
+  render();
+}
+
+function moveStep(index, direction) {
+  const steps = playlist[selectedSequence].steps;
+  const target = index + direction;
+  if (target < 0 || target >= steps.length) return;
+  [steps[index], steps[target]] = [steps[target], steps[index]];
+  selectedStep = target;
+  render();
+}
+
+function cloneStep(step) {
+  return JSON.parse(JSON.stringify(normalizeStep(step)));
+}
+
+function copyStep(index) {
+  copiedStep = cloneStep(playlist[selectedSequence].steps[index]);
+  statusEl.textContent = `Schritt ${index + 1} kopiert`;
+}
+
+function pasteStep(afterIndex = selectedStep) {
+  if (!copiedStep) return;
+  const steps = playlist[selectedSequence].steps;
+  const insertAt = afterIndex >= 0 ? afterIndex + 1 : steps.length;
+  steps.splice(insertAt, 0, cloneStep(copiedStep));
+  selectedStep = insertAt;
+  loadStep(insertAt);
+  statusEl.textContent = `Schritt eingefuegt`;
+}
+
+function addSequence() {
+  playlist.splice(selectedSequence + 1, 0, { name: 'Neue Sequenz', durationMs: 10000, steps: [] });
+  selectedSequence += 1;
+  selectedStep = -1;
+  paintedColors.clear();
+  currentEffects = [];
+  render();
+}
+
+function deleteSequence() {
+  if (playlist.length <= 1) return;
+  playlist.splice(selectedSequence, 1);
+  selectedSequence = Math.max(0, selectedSequence - 1);
+  selectedStep = -1;
+  paintedColors.clear();
+  currentEffects = [];
+  render();
+}
+
+function moveSequence(direction) {
+  const target = selectedSequence + direction;
+  if (target < 0 || target >= playlist.length) return;
+  [playlist[selectedSequence], playlist[target]] = [playlist[target], playlist[selectedSequence]];
+  selectedSequence = target;
+  render();
+}
+
+function play() {
+  stop(false);
+  playing = true;
+  statusEl.textContent = 'Simulation laeuft';
+  let seqIndex = 0;
+  let stepIndex = 0;
+  let seqStartedAt = Date.now();
+
+  function tick() {
+    if (!playing || !playlist.length) return;
+    const seq = playlist[seqIndex];
+    if (!seq.steps.length) {
+      seqIndex = (seqIndex + 1) % playlist.length;
+      stepIndex = 0;
+      seqStartedAt = Date.now();
+      tick();
+      return;
+    }
+    const step = seq.steps[stepIndex];
+    const activeStep = normalizeStep(step);
+    clearInterval(animationTimer);
+    animationTimer = setInterval(() => renderStrip(activeStep), 90);
+    renderStrip(activeStep);
+
+    playTimer = setTimeout(() => {
+      clearInterval(animationTimer);
+      stepIndex = (stepIndex + 1) % seq.steps.length;
+      if (Date.now() - seqStartedAt >= seq.durationMs) {
+        seqIndex = (seqIndex + 1) % playlist.length;
+        stepIndex = 0;
+        seqStartedAt = Date.now();
+      }
+      tick();
+    }, step.durationMs);
+  }
+  tick();
+}
+
+function stop(updateStatus = true) {
+  playing = false;
+  clearTimeout(playTimer);
+  clearInterval(animationTimer);
+  if (updateStatus) statusEl.textContent = 'Simulation gestoppt';
+  renderStrip();
+}
+
+function saveLocal() {
+  localStorage.setItem('rgb-sim-playlist', JSON.stringify({ ledCount, playlist }));
+  statusEl.textContent = 'Im Browser gespeichert';
+}
+
+function loadLocal() {
+  const saved = localStorage.getItem('rgb-sim-playlist');
+  if (saved) {
+    const data = JSON.parse(saved);
+    ledCount = clamp(data.ledCount || 60, 1, MAX_LEDS);
+    playlist = Array.isArray(data.playlist) && data.playlist.length ? data.playlist : defaultPlaylist();
+    playlist.forEach(seq => seq.steps = (seq.steps || []).map(step => {
+      step = normalizeStep(step);
+      if (!Array.isArray(step.effects)) step.effects = [];
+      step.effects = step.effects.map(effect => ({ ...effect, speed: clamp(Number(effect.speed) || 1, 0.1, 10), color: effect.color || '#ffffff' }));
+      return step;
+    }));
+  } else {
+    playlist = defaultPlaylist();
+  }
+}
+
+function compactSelection() {
+  return compactNumbers([...paintedColors.keys()]);
+}
+
+function compactNumbers(numbers) {
+  const nums = [...numbers].sort((a, b) => a - b);
+  const ranges = [];
+  for (let i = 0; i < nums.length; i++) {
+    const start = nums[i];
+    let end = start;
+    while (nums[i + 1] === end + 1) end = nums[++i];
+    ranges.push(start === end ? `${start}` : `${start}-${end}`);
+  }
+  return ranges.join(',');
+}
+
+function expandSelection(text) {
+  const result = new Set();
+  for (const part of String(text || '').split(',')) {
+    const [a, b] = part.split('-').map(v => parseInt(v, 10));
+    if (!Number.isFinite(a)) continue;
+    const end = Number.isFinite(b) ? b : a;
+    for (let i = Math.min(a, end); i <= Math.max(a, end); i++) {
+      if (i >= 1 && i <= ledCount) result.add(i);
+    }
+  }
+  return result;
+}
+
+function secondsToMs(value, fallback) {
+  const number = parseFloat(String(value).replace(',', '.'));
+  return Math.max(20, Math.round((Number.isFinite(number) ? number : fallback) * 1000));
+}
+
+function msToSeconds(ms) {
+  return (Math.round((ms || 1000) / 100) / 10).toString();
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+}
+
+loadLocal();
+if (playlist[0]?.steps[0]) {
+  const firstStep = normalizeStep(playlist[0].steps[0]);
+  paintedColors = mapFromGroups(firstStep.groups);
+  currentEffects = Array.isArray(firstStep.effects) ? firstStep.effects.map(effect => ({ ...effect, speed: clamp(Number(effect.speed) || 1, 0.1, 10), color: effect.color || '#ffffff' })) : [];
+  stepColor.value = firstStep.groups[0]?.color || '#ff0000';
+  stepSeconds.value = msToSeconds(firstStep.durationMs);
+  selectedStep = 0;
+}
+render();
+</script>
+</body>
+</html>

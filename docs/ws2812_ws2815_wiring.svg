@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720">
+  <defs>
+    <style>
+      .bg { fill: #f8fafc; }
+      .box { fill: #ffffff; stroke: #0f172a; stroke-width: 3; rx: 10; }
+      .part { fill: #eef6ff; stroke: #1e3a8a; stroke-width: 2.5; rx: 8; }
+      .wire { fill: none; stroke: #111827; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+      .red { stroke: #dc2626; stroke-width: 5; }
+      .green { stroke: #16a34a; stroke-width: 4; }
+      .blue { stroke: #2563eb; stroke-width: 4; }
+      .label { font-family: Arial, Helvetica, sans-serif; fill: #0f172a; font-size: 24px; font-weight: 700; }
+      .small { font-family: Arial, Helvetica, sans-serif; fill: #334155; font-size: 18px; }
+      .tiny { font-family: Arial, Helvetica, sans-serif; fill: #475569; font-size: 15px; }
+      .dot { fill: #111827; }
+      .led { fill: #fde047; stroke: #854d0e; stroke-width: 2; }
+      .warn { fill: #fff7ed; stroke: #f97316; stroke-width: 2.5; rx: 8; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1200" height="720"/>
+  <text class="label" x="50" y="55">WS2812 / WS2815 RGB-Sequenzer Verdrahtung</text>
+  <text class="small" x="50" y="88">ESP32 steuert DIN, Netzteil versorgt den LED-Streifen. GND muss gemeinsam sein.</text>
+
+  <rect class="box" x="70" y="160" width="230" height="250"/>
+  <text class="label" x="140" y="200">ESP32</text>
+  <text class="small" x="105" y="242">GPIO 16</text>
+  <text class="small" x="105" y="285">GND</text>
+  <text class="small" x="105" y="328">5V/VIN</text>
+
+  <rect class="box" x="760" y="145" width="330" height="290"/>
+  <text class="label" x="815" y="185">LED-Streifen</text>
+  <text class="small" x="805" y="225">WS2812B: +5V, GND, DIN</text>
+  <text class="small" x="805" y="255">WS2815: +12V, GND, DIN</text>
+  <g transform="translate(810 310)">
+    <circle class="led" cx="0" cy="0" r="18"/>
+    <circle class="led" cx="48" cy="0" r="18"/>
+    <circle class="led" cx="96" cy="0" r="18"/>
+    <circle class="led" cx="144" cy="0" r="18"/>
+    <circle class="led" cx="192" cy="0" r="18"/>
+  </g>
+  <text class="small" x="805" y="390">DIN am Anfang des Streifens</text>
+
+  <rect class="box" x="440" y="480" width="300" height="105"/>
+  <text class="label" x="480" y="522">Netzteil</text>
+  <text class="small" x="480" y="555">5 V fuer WS2812B</text>
+  <text class="small" x="480" y="580">12 V fuer WS2815</text>
+
+  <rect class="part" x="95" y="510" width="230" height="85"/>
+  <text class="label" x="125" y="548">Step-Down</text>
+  <text class="small" x="126" y="576">12 V auf 5 V fuer ESP32</text>
+
+  <rect class="part" x="430" y="215" width="150" height="50"/>
+  <text class="small" x="458" y="247">330 Ohm</text>
+
+  <path class="wire blue" d="M300 240 L430 240"/>
+  <path class="wire blue" d="M580 240 L760 240"/>
+  <text class="tiny" x="455" y="205">Datenleitung</text>
+
+  <path class="wire red" d="M590 480 L590 430 L760 430"/>
+  <path class="wire" d="M590 585 L590 465 L760 465"/>
+  <text class="small" x="805" y="432">+V</text>
+  <text class="small" x="805" y="470">GND</text>
+
+  <path class="wire" d="M300 285 L590 465"/>
+  <circle class="dot" cx="590" cy="465" r="6"/>
+  <text class="tiny" x="338" y="318">Gemeinsamer GND</text>
+
+  <path class="wire red" d="M590 480 L210 510"/>
+  <path class="wire" d="M590 585 L210 595"/>
+  <path class="wire red" d="M210 510 L210 328 L300 328"/>
+  <path class="wire" d="M210 595 L210 285 L300 285"/>
+  <text class="tiny" x="230" y="503">nur bei 12-V-Projekt</text>
+
+  <rect class="warn" x="70" y="635" width="1010" height="48"/>
+  <text class="small" x="92" y="666">Wichtig: ESP32 nie direkt an 12 V anschliessen. Bei langen Streifen Plus/GND mehrfach einspeisen und Sicherung verwenden.</text>
+</svg>

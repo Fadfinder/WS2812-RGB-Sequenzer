@@ -1,0 +1,13 @@
+# Build and local clutter
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+
+# Arduino build folders
+build/
+.pio/
+
+# Local Codex scratch/output folders are not part of the clean repo
+work/
+outputs/
