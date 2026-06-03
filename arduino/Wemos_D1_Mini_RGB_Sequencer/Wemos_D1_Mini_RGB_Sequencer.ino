@@ -1,18 +1,17 @@
-#include <WiFi.h>
-#include <WebServer.h>
-#include <Preferences.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+#include <LittleFS.h>
 #include <Adafruit_NeoPixel.h>
 
-// For a 12 V project, use a 12 V addressable strip such as WS2815.
-// DIN of the strip is connected to this ESP32 pin through about 330 Ohm.
-const uint8_t DATA_PIN = 16;
+// DIN of the WS2812B strip is connected to D4 through about 330 Ohm.
+// D4 is GPIO2 on the Wemos D1 mini.
+const uint8_t DATA_PIN = D4;
 const uint16_t MAX_LEDS = 300;
 
 const char* AP_SSID = "RGB-Sequencer";
 const char* AP_PASSWORD = "12345678";
 
-WebServer server(80);
-Preferences prefs;
+ESP8266WebServer server(80);
 Adafruit_NeoPixel strip(MAX_LEDS, DATA_PIN, NEO_GRB + NEO_KHZ800);
 
 uint16_t ledCount = 60;
@@ -409,15 +408,20 @@ void parsePlaylist(const String& text) {
 }
 
 void savePlaylist(const String& text) {
-  prefs.begin("rgbseq", false);
-  prefs.putString("playlist", text);
-  prefs.end();
+  File file = LittleFS.open("/playlist.txt", "w");
+  if (!file) return;
+  file.print(text);
+  file.close();
 }
 
 void loadPlaylist() {
-  prefs.begin("rgbseq", true);
-  playlistText = prefs.getString("playlist", playlistText);
-  prefs.end();
+  if (LittleFS.exists("/playlist.txt")) {
+    File file = LittleFS.open("/playlist.txt", "r");
+    if (file) {
+      playlistText = file.readString();
+      file.close();
+    }
+  }
   parsePlaylist(playlistText);
 }
 
@@ -576,7 +580,7 @@ String htmlPage() {
       <h2>Speichern</h2>
       <button class="primary" onclick="saveAll()">Alle Sequenzen speichern</button>
       <p id="status" class="status"></p>
-      <p class="muted">Beim Bearbeiten leuchtet der Streifen live. Nach dem Speichern laeuft der ESP32 ohne Browser weiter.</p>
+      <p class="muted">Beim Bearbeiten leuchtet der Streifen live. Nach dem Speichern laeuft der Wemos ohne Browser weiter.</p>
     </div>
   </section>
 </main>
@@ -1069,6 +1073,7 @@ void handleSave() {
 void setup() {
   strip.begin();
   clearStrip();
+  LittleFS.begin();
   loadPlaylist();
 
   WiFi.mode(WIFI_AP);
