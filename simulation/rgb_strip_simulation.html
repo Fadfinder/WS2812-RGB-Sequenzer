@@ -8,7 +8,7 @@
     :root { font-family: system-ui, sans-serif; color: #172033; background: #eef2f7; }
     * { box-sizing: border-box; }
     body { margin: 0; background: #eef2f7; color: #172033; }
-    main { display: grid; grid-template-columns: 280px 1fr 340px; min-height: 100vh; }
+    main { display: grid; grid-template-columns: 380px 1fr 340px; min-height: 100vh; }
     aside, section { padding: 18px; }
     aside { background: #182235; color: #f8fafc; }
     h1 { font-size: 22px; margin: 0 0 18px; }
@@ -21,11 +21,16 @@
     button.ghost { background: #2a3650; color: #f8fafc; }
     button.icon { width: 36px; height: 36px; padding: 0; }
     input, select { width: 100%; border: 1px solid #cbd5e1; border-radius: 7px; padding: 9px; background: #fff; color: #172033; }
+    aside input, aside select { border-color: #475569; }
     .seq-list { display: grid; gap: 8px; }
     .seq-item { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; padding: 10px; border-radius: 8px; background: #26334b; color: #f8fafc; cursor: pointer; }
     .seq-item.active { outline: 3px solid #38bdf8; background: #31415d; }
     .seq-meta { color: #cbd5e1; font-size: 13px; margin-top: 3px; }
     .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .sidebar-row { display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; }
+    .sidebar-row button { flex: 1 1 0; padding-left: 8px; padding-right: 8px; }
+    .sidebar-panel { margin-bottom: 18px; }
+    .sidebar-panel label { display: block; margin-bottom: 8px; }
     .panel { background: #fff; border: 1px solid #d7dee8; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
     .strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(30px, 1fr)); gap: 8px; max-height: 270px; overflow: auto; padding: 10px; background: #0f172a; border-radius: 8px; }
     .pixel { aspect-ratio: 1; border-radius: 50%; background: #1f2937; border: 2px solid #334155; color: #94a3b8; display: grid; place-items: center; font-size: 11px; font-weight: 800; }
@@ -48,9 +53,21 @@
 <main>
   <aside>
     <h1>RGB Simulation</h1>
+
+    <div class="sidebar-panel">
+      <h3>Streifen</h3>
+      <label>Anzahl LEDs
+        <input id="ledCountInput" type="number" min="1" max="300" value="60" onchange="changeLedCount()">
+      </label>
+      <div class="sidebar-row">
+        <button class="ghost" onclick="paintAll()">Alle setzen</button>
+        <button class="ghost" onclick="clearPaint()">Alle aus</button>
+      </div>
+    </div>
+
     <div class="seq-list" id="sequenceList"></div>
     <h3>Playlist</h3>
-    <div class="row">
+    <div class="sidebar-row">
       <button class="ghost" onclick="addSequence()">Neu</button>
       <button class="ghost" onclick="moveSequence(-1)">Hoch</button>
       <button class="ghost" onclick="moveSequence(1)">Runter</button>
@@ -62,29 +79,6 @@
     <div class="panel">
       <h2>Simulierter LED-Streifen</h2>
       <div class="strip" id="strip"></div>
-    </div>
-
-    <div class="panel">
-      <h2>Streifen</h2>
-      <div class="row">
-        <label style="width: 180px">Anzahl LEDs
-          <input id="ledCountInput" type="number" min="1" max="300" value="60" onchange="changeLedCount()">
-        </label>
-        <button onclick="paintAll()">Alle mit Farbe setzen</button>
-        <button onclick="clearPaint()">Alle aus</button>
-      </div>
-    </div>
-
-    <div class="panel">
-      <h2>Sequenz bearbeiten</h2>
-      <div class="row">
-        <label style="flex: 1 1 260px">Name
-          <input id="seqName" oninput="updateSequenceMeta()">
-        </label>
-        <label style="width: 170px">Dauer Sequenz
-          <input id="seqDuration" type="number" min="0.1" step="0.1" oninput="updateSequenceMeta()">
-        </label>
-      </div>
     </div>
 
     <div class="panel">
@@ -100,6 +94,18 @@
         <button class="primary" onclick="saveStep()">Schritt speichern</button>
         <button onclick="newStep()">Neuer Schritt</button>
         <button onclick="pasteStep()">Kopierten Schritt einfuegen</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Sequenz bearbeiten</h2>
+      <div class="row">
+        <label style="flex: 1 1 260px">Name
+          <input id="seqName" oninput="updateSequenceMeta()">
+        </label>
+        <label style="width: 170px">Dauer Sequenz
+          <input id="seqDuration" type="number" min="0.1" step="0.1" oninput="updateSequenceMeta()">
+        </label>
       </div>
     </div>
 
@@ -177,9 +183,6 @@ let selectedStep = -1;
 let paintedColors = new Map();
 let currentEffects = [];
 let copiedStep = null;
-let playTimer = null;
-let animationTimer = null;
-let playing = false;
 
 const sequenceList = document.getElementById('sequenceList');
 const ledGrid = document.getElementById('ledGrid');
@@ -266,159 +269,8 @@ function effectName(type) {
   })[type] || type;
 }
 
-function hexColor(r, g, b) {
-  return `#${[r, g, b].map(v => clamp(Math.round(v), 0, 255).toString(16).padStart(2, '0')).join('')}`;
-}
-
-function rgbFromHex(color) {
-  const hex = String(color || '#ffffff').replace('#', '').padEnd(6, 'f').slice(0, 6);
-  return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
-}
-
-function scaleColor(color, factor) {
-  const [r, g, b] = rgbFromHex(color);
-  return hexColor(r * factor, g * factor, b * factor);
-}
-
 function usesEffectColor(type) {
   return ['sparkle', 'comet', 'theater', 'pulse', 'breathe', 'meteor', 'twinkle', 'scanner', 'heartbeat'].includes(type);
-}
-
-function hsvToHex(h, s, v) {
-  const c = v * s;
-  const x = c * (1 - Math.abs((h / 60) % 2 - 1));
-  const m = v - c;
-  let r = 0, g = 0, b = 0;
-  if (h < 60) [r, g, b] = [c, x, 0];
-  else if (h < 120) [r, g, b] = [x, c, 0];
-  else if (h < 180) [r, g, b] = [0, c, x];
-  else if (h < 240) [r, g, b] = [0, x, c];
-  else if (h < 300) [r, g, b] = [x, 0, c];
-  else [r, g, b] = [c, 0, x];
-  return hexColor((r + m) * 255, (g + m) * 255, (b + m) * 255);
-}
-
-function colorForEffect(type, led, frame, chosenColor = '#ffffff') {
-  if (type === 'fire') {
-    const heat = 120 + Math.random() * 135;
-    const green = 18 + Math.random() * 95;
-    return hexColor(heat, green, Math.random() * 8);
-  }
-  if (type === 'storm') {
-    const flash = Math.random() > 0.93;
-    if (flash) return Math.random() > 0.35 ? '#ffffff' : '#9fd8ff';
-    const pulse = 18 + Math.random() * 42;
-    return hexColor(pulse * 0.35, pulse * 0.55, pulse);
-  }
-  if (type === 'rainbow') {
-    return hsvToHex((frame * 7 + led * 13) % 360, 0.95, 1);
-  }
-  if (type === 'welder') {
-    const burst = Math.sin(frame * 0.9) > 0.35 || Math.random() > 0.78;
-    if (!burst) return '#020611';
-    const white = 180 + Math.random() * 75;
-    return Math.random() > 0.28 ? hexColor(120 + Math.random() * 80, 180 + Math.random() * 75, white) : '#ffffff';
-  }
-  if (type === 'camera') {
-    const phase = frame % 42;
-    if (phase < 1.2) return '#ffffff';
-    if (phase < 2.6) return '#b9d7ff';
-    if (phase < 5.5) return '#1b263a';
-    return '#000000';
-  }
-  if (type === 'police') {
-    const phase = Math.floor(frame / 3) % 4;
-    return phase < 2 ? '#ff0028' : '#006dff';
-  }
-  if (type === 'sparkle') {
-    return Math.random() > 0.82 ? chosenColor : '#060606';
-  }
-  if (type === 'comet') {
-    const head = frame % ledCount;
-    const d = Math.abs(led - head);
-    const glow = Math.max(0, 1 - d / 7);
-    return scaleColor(chosenColor, glow);
-  }
-  if (type === 'theater') {
-    return ((led + Math.floor(frame / 2)) % 3 === 0) ? chosenColor : '#000000';
-  }
-  if (type === 'pulse') {
-    const v = 0.18 + 0.82 * ((Math.sin(frame / 4) + 1) / 2);
-    return scaleColor(chosenColor, v);
-  }
-  if (type === 'breathe') {
-    const v = Math.pow((Math.sin(frame / 7) + 1) / 2, 1.8);
-    return scaleColor(chosenColor, v);
-  }
-  if (type === 'lava') {
-    const v = (Math.sin(frame / 3 + led * 0.55) + 1) / 2;
-    return hexColor(120 + 135 * v, 18 + 62 * v, 0);
-  }
-  if (type === 'ocean') {
-    const v = (Math.sin(frame / 5 + led * 0.35) + 1) / 2;
-    return hexColor(0, 45 + 80 * v, 110 + 145 * v);
-  }
-  if (type === 'forest') {
-    const v = (Math.sin(frame / 6 + led * 0.41) + 1) / 2;
-    return hexColor(2 + 18 * v, 55 + 120 * v, 12 + 38 * v);
-  }
-  if (type === 'meteor') {
-    const head = (frame * 1.6) % ledCount;
-    const d = Math.abs(led - head);
-    const glow = Math.max(0, 1 - d / 9);
-    return scaleColor(chosenColor, glow);
-  }
-  if (type === 'twinkle') {
-    const base = (Math.sin(frame * 0.7 + led * 2.17) + 1) / 2;
-    const flash = Math.random() > 0.96 ? 1 : base * 0.28;
-    return scaleColor(chosenColor, flash);
-  }
-  if (type === 'candle') {
-    const v = 0.55 + Math.random() * 0.45;
-    return hexColor(255 * v, (105 + Math.random() * 55) * v, 18 * v);
-  }
-  if (type === 'sunrise') {
-    const v = (Math.sin(frame / 12) + 1) / 2;
-    return hexColor(110 + 145 * v, 35 + 130 * v, 55 + 45 * v);
-  }
-  if (type === 'sunset') {
-    const v = (Math.sin(frame / 11 + 1.6) + 1) / 2;
-    return hexColor(255 * v, 95 * v, 12 + 70 * (1 - v));
-  }
-  if (type === 'scanner') {
-    const span = Math.max(1, ledCount - 1);
-    const pos = Math.abs((frame * 1.4 % (span * 2)) - span) + 1;
-    const d = Math.abs(led - pos);
-    const glow = Math.max(0, 1 - d / 5);
-    return scaleColor(chosenColor, glow);
-  }
-  if (type === 'confetti') {
-    return Math.random() > 0.72 ? hsvToHex(Math.random() * 360, 0.9, 1) : '#000000';
-  }
-  if (type === 'aurora') {
-    const hue = 135 + 75 * ((Math.sin(frame / 8 + led * 0.31) + 1) / 2);
-    const v = 0.35 + 0.65 * ((Math.sin(frame / 5 + led * 0.13) + 1) / 2);
-    return hsvToHex(hue, 0.85, v);
-  }
-  if (type === 'toxic') {
-    const v = Math.random() > 0.9 ? 1 : 0.45 + 0.45 * ((Math.sin(frame / 2 + led) + 1) / 2);
-    return hexColor(80 * v, 255 * v, 0);
-  }
-  if (type === 'heartbeat') {
-    const phase = frame % 24;
-    const beat = phase < 2 || (phase > 5 && phase < 8) ? 1 : Math.max(0, 1 - (phase - 8) / 16);
-    return scaleColor(chosenColor, beat);
-  }
-  return '#000000';
-}
-
-function applyEffectsToColors(colors, effects, frame) {
-  for (const effect of effects || []) {
-    for (const led of expandSelection(effect.leds)) {
-      colors.set(led, colorForEffect(effect.type, led, frame * (Number(effect.speed) || 1), effect.color || '#ffffff'));
-    }
-  }
-  return colors;
 }
 
 function render() {
@@ -453,9 +305,13 @@ function colorMapFromGroups(groups) {
   return colors;
 }
 
-function renderStrip(step = currentStepDraft(), frame = Date.now() / 80) {
+function renderStrip(step = currentStepDraft()) {
   step = normalizeStep(step);
-  const colors = applyEffectsToColors(colorMapFromGroups(step.groups), step.effects, frame);
+  const colors = colorMapFromGroups(step.groups);
+  for (const effect of step.effects || []) {
+    const marker = usesEffectColor(effect.type) ? (effect.color || '#ffffff') : '#38bdf8';
+    for (const led of expandSelection(effect.leds)) colors.set(led, marker);
+  }
   strip.innerHTML = '';
   for (let i = 1; i <= ledCount; i++) {
     const pixel = document.createElement('div');
@@ -471,10 +327,7 @@ function renderStrip(step = currentStepDraft(), frame = Date.now() / 80) {
 }
 
 function updateEditAnimation() {
-  if (playing) return;
-  clearInterval(animationTimer);
-  if (!currentEffects.length) return;
-  animationTimer = setInterval(() => renderStrip(), 90);
+  renderStrip();
 }
 
 function currentStepDraft() {
@@ -682,49 +535,20 @@ function moveSequence(direction) {
 }
 
 function play() {
-  stop(false);
-  playing = true;
-  statusEl.textContent = 'Simulation laeuft';
-  let seqIndex = 0;
-  let stepIndex = 0;
-  let seqStartedAt = Date.now();
-
-  function tick() {
-    if (!playing || !playlist.length) return;
-    const seq = playlist[seqIndex];
-    if (!seq.steps.length) {
-      seqIndex = (seqIndex + 1) % playlist.length;
-      stepIndex = 0;
-      seqStartedAt = Date.now();
-      tick();
-      return;
-    }
-    const step = seq.steps[stepIndex];
-    const activeStep = normalizeStep(step);
-    clearInterval(animationTimer);
-    animationTimer = setInterval(() => renderStrip(activeStep), 90);
-    renderStrip(activeStep);
-
-    playTimer = setTimeout(() => {
-      clearInterval(animationTimer);
-      stepIndex = (stepIndex + 1) % seq.steps.length;
-      if (Date.now() - seqStartedAt >= seq.durationMs) {
-        seqIndex = (seqIndex + 1) % playlist.length;
-        stepIndex = 0;
-        seqStartedAt = Date.now();
-      }
-      tick();
-    }, step.durationMs);
-  }
-  tick();
+  const firstStep = playlist[0]?.steps[0];
+  if (firstStep) renderStrip(firstStep);
+  statusEl.textContent = 'Erster gespeicherter Schritt wird angezeigt';
 }
 
 function stop(updateStatus = true) {
-  playing = false;
-  clearTimeout(playTimer);
-  clearInterval(animationTimer);
   if (updateStatus) statusEl.textContent = 'Simulation gestoppt';
-  renderStrip();
+  strip.innerHTML = '';
+  for (let i = 1; i <= ledCount; i++) {
+    const pixel = document.createElement('div');
+    pixel.className = 'pixel';
+    pixel.textContent = i;
+    strip.appendChild(pixel);
+  }
 }
 
 function saveLocal() {

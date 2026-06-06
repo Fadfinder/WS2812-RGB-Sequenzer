@@ -103,7 +103,13 @@ const uint8_t DATA_PIN = D4;
 4. Board `LOLIN(WEMOS) D1 R2 & mini` auswaehlen.
 5. Sketch hochladen.
 6. Mit WLAN `RGB-Sequencer` verbinden, Passwort `12345678`.
-7. Browser oeffnen: `http://192.168.4.1`.
+7. Browser oeffnen: bevorzugt `http://rgb-sequencer.local`.
+8. Falls das nicht klappt: `http://192.168.178.99`.
+
+Der Wemos beantwortet ausserdem DNS-Anfragen im eigenen WLAN und zeigt fuer unbekannte
+Adressen die Bedienoberflaeche. Auf vielen Smartphones erscheint dadurch nach dem
+Verbinden automatisch ein Anmelde-/Portal-Fenster. Auf Windows kann das wegen fester
+IP-/DNS-Einstellungen ausbleiben; dann die Adresse oben manuell oeffnen.
 8. LED-Anzahl einstellen, Sequenzen und Schritte erstellen.
 9. `Alle Sequenzen speichern` druecken.
 

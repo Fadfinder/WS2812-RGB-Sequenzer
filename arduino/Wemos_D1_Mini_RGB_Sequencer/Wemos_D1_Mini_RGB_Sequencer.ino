@@ -1,5 +1,7 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
+#include <DNSServer.h>
+#include <ESP8266mDNS.h>
 #include <LittleFS.h>
 #include <Adafruit_NeoPixel.h>
 
@@ -10,8 +12,17 @@ const uint16_t MAX_LEDS = 300;
 
 const char* AP_SSID = "RGB-Sequencer";
 const char* AP_PASSWORD = "12345678";
+const char* MDNS_NAME = "rgb-sequencer";
+const uint16_t DNS_PORT = 53;
+const uint8_t AP_CHANNEL = 6;
+const uint8_t AP_MAX_CLIENTS = 8;
+const unsigned long WIFI_CHECK_INTERVAL_MS = 15000;
+IPAddress AP_IP(192, 168, 178, 99);
+IPAddress AP_GATEWAY(192, 168, 178, 99);
+IPAddress AP_SUBNET(255, 255, 255, 0);
 
 ESP8266WebServer server(80);
+DNSServer dnsServer;
 Adafruit_NeoPixel strip(MAX_LEDS, DATA_PIN, NEO_GRB + NEO_KHZ800);
 
 uint16_t ledCount = 60;
@@ -53,7 +64,9 @@ unsigned long lastStepAt = 0;
 unsigned long sequenceStartedAt = 0;
 unsigned long liveUntil = 0;
 unsigned long lastEffectAt = 0;
+unsigned long lastWifiCheckAt = 0;
 String liveGroups = "";
+bool playbackRunning = true;
 
 uint32_t parseColor(String value) {
   value.trim();
@@ -425,8 +438,7 @@ void loadPlaylist() {
   parsePlaylist(playlistText);
 }
 
-String htmlPage() {
-  String page = R"HTML(
+const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
 <!doctype html>
 <html lang="de">
 <head>
@@ -437,7 +449,7 @@ String htmlPage() {
     :root { font-family: system-ui, sans-serif; color: #172033; background: #eef2f7; }
     * { box-sizing: border-box; }
     body { margin: 0; background: #eef2f7; color: #172033; }
-    main { display: grid; grid-template-columns: 270px 1fr 320px; min-height: 100vh; }
+    main { display: grid; grid-template-columns: 380px 1fr 320px; min-height: 100vh; }
     aside, section { padding: 18px; }
     aside { background: #182235; color: #f8fafc; }
     h1 { font-size: 22px; margin: 0 0 18px; }
@@ -450,12 +462,20 @@ String htmlPage() {
     button.ghost { background: #2a3650; color: #f8fafc; }
     button.icon { width: 36px; height: 36px; padding: 0; }
     input, select { width: 100%; border: 1px solid #cbd5e1; border-radius: 7px; padding: 9px; background: #fff; color: #172033; }
+    aside input, aside select { border-color: #475569; }
     .seq-list { display: grid; gap: 8px; }
     .seq-item { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; padding: 10px; border-radius: 8px; background: #26334b; color: #f8fafc; cursor: pointer; }
     .seq-item.active { outline: 3px solid #38bdf8; background: #31415d; }
     .seq-meta { color: #cbd5e1; font-size: 13px; margin-top: 3px; }
     .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .sidebar-row { display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; }
+    .sidebar-row button { flex: 1 1 0; padding-left: 8px; padding-right: 8px; }
+    .sidebar-panel { margin-bottom: 18px; }
+    .sidebar-panel label { display: block; margin-bottom: 8px; }
     .panel { background: #fff; border: 1px solid #d7dee8; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(30px, 1fr)); gap: 8px; max-height: 270px; overflow: auto; padding: 10px; background: #0f172a; border-radius: 8px; }
+    .pixel { aspect-ratio: 1; border-radius: 50%; background: #1f2937; border: 2px solid #334155; color: #94a3b8; display: grid; place-items: center; font-size: 11px; font-weight: 800; }
+    .pixel.on { color: #fff; border-color: rgba(255,255,255,.78); box-shadow: 0 0 14px currentColor; }
     .led-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 8px; max-height: 360px; overflow: auto; padding: 2px; }
     .led-btn { min-height: 42px; border: 2px solid #cbd5e1; background: #f8fafc; }
     .led-btn.on { color: #fff; border-color: #111827; }
@@ -474,9 +494,21 @@ String htmlPage() {
 <main>
   <aside>
     <h1>RGB Sequencer</h1>
+
+    <div class="sidebar-panel">
+      <h3>Streifen</h3>
+      <label>Anzahl LEDs
+        <input id="ledCountInput" type="number" min="1" max="300" value="60" onchange="changeLedCount()" />
+      </label>
+      <div class="sidebar-row">
+        <button class="ghost" onclick="paintAll()">Alle setzen</button>
+        <button class="ghost" onclick="clearPaint()">Alle aus</button>
+      </div>
+    </div>
+
     <div class="seq-list" id="sequenceList"></div>
     <h3>Playlist</h3>
-    <div class="row">
+    <div class="sidebar-row">
       <button class="ghost" onclick="addSequence()">Neu</button>
       <button class="ghost" onclick="moveSequence(-1)">Hoch</button>
       <button class="ghost" onclick="moveSequence(1)">Runter</button>
@@ -486,26 +518,8 @@ String htmlPage() {
 
   <section>
     <div class="panel">
-      <h2>Streifen</h2>
-      <div class="row">
-        <label style="width: 180px">Anzahl LEDs
-          <input id="ledCountInput" type="number" min="1" max="300" value="60" onchange="changeLedCount()" />
-        </label>
-        <button onclick="paintAll()">Alle mit Farbe setzen</button>
-        <button onclick="clearPaint()">Alle aus</button>
-      </div>
-    </div>
-
-    <div class="panel">
-      <h2>Sequenz bearbeiten</h2>
-      <div class="row">
-        <label style="flex: 1 1 260px">Name
-          <input id="seqName" oninput="updateSequenceMeta()" />
-        </label>
-        <label style="width: 170px">Dauer Sequenz
-          <input id="seqDuration" type="number" min="0.1" step="0.1" oninput="updateSequenceMeta()" />
-        </label>
-      </div>
+      <h2>Simulierter LED-Streifen</h2>
+      <div class="strip" id="strip"></div>
     </div>
 
     <div class="panel">
@@ -521,6 +535,18 @@ String htmlPage() {
         <button class="primary" onclick="saveStep()">Schritt speichern</button>
         <button onclick="newStep()">Neuer Schritt</button>
         <button onclick="pasteStep()">Kopierten Schritt einfuegen</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Sequenz bearbeiten</h2>
+      <div class="row">
+        <label style="flex: 1 1 260px">Name
+          <input id="seqName" oninput="updateSequenceMeta()" />
+        </label>
+        <label style="width: 170px">Dauer Sequenz
+          <input id="seqDuration" type="number" min="0.1" step="0.1" oninput="updateSequenceMeta()" />
+        </label>
       </div>
     </div>
 
@@ -559,10 +585,10 @@ String htmlPage() {
           </select>
         </label>
         <label style="width: 150px">Geschwindigkeit
-          <input id="effectSpeed" type="number" min="0.1" max="10" step="0.1" value="1" />
+          <input id="effectSpeed" type="number" min="0.1" max="10" step="0.1" value="1" oninput="liveCurrentStep()" />
         </label>
         <label style="width: 120px">Effektfarbe
-          <input id="effectColor" type="color" value="#ffffff" />
+          <input id="effectColor" type="color" value="#ffffff" oninput="liveCurrentStep()" />
         </label>
         <button onclick="addEffect()">Effekt hinzufuegen</button>
       </div>
@@ -577,7 +603,12 @@ String htmlPage() {
 
   <section>
     <div class="panel">
-      <h2>Speichern</h2>
+      <h2>Steuerung</h2>
+      <div class="row">
+        <button class="primary" onclick="playPlaylist()">Abspielen</button>
+        <button onclick="stopPlaylist()">Stop</button>
+      </div>
+      <h2 style="margin-top:18px">Speichern</h2>
       <button class="primary" onclick="saveAll()">Alle Sequenzen speichern</button>
       <p id="status" class="status"></p>
       <p class="muted">Beim Bearbeiten leuchtet der Streifen live. Nach dem Speichern laeuft der Wemos ohne Browser weiter.</p>
@@ -597,6 +628,7 @@ let copiedStep = null;
 let liveTimer = null;
 
 const sequenceList = document.getElementById('sequenceList');
+const strip = document.getElementById('strip');
 const ledGrid = document.getElementById('ledGrid');
 const stepsEl = document.getElementById('steps');
 const effectsEl = document.getElementById('effects');
@@ -764,8 +796,42 @@ function render() {
   seqName.value = seq.name || '';
   seqDuration.value = msToSeconds(seq.durationMs);
   renderLedGrid();
+  renderStrip();
   renderEffects();
   renderSteps();
+}
+
+function colorMapFromGroups(groups) {
+  const colors = new Map();
+  for (const group of groups || []) {
+    for (const led of expandSelection(group.leds)) colors.set(led, group.color);
+  }
+  return colors;
+}
+
+function currentStepDraft() {
+  return { durationMs: secondsToMs(stepSeconds.value, 1), groups: groupsFromMap(paintedColors), effects: currentEffects };
+}
+
+function renderStrip(step = currentStepDraft()) {
+  step = normalizeStep(step);
+  const colors = colorMapFromGroups(step.groups);
+  for (const effect of step.effects || []) {
+    const effectColor = usesEffectColor(effect.type) ? (effect.color || '#ffffff') : '#38bdf8';
+    for (const led of expandSelection(effect.leds)) colors.set(led, effectColor);
+  }
+  strip.innerHTML = '';
+  for (let i = 1; i <= ledCount; i++) {
+    const pixel = document.createElement('div');
+    const color = colors.get(i);
+    pixel.className = `pixel ${color ? 'on' : ''}`;
+    pixel.textContent = i;
+    if (color) {
+      pixel.style.background = color;
+      pixel.style.color = color;
+    }
+    strip.appendChild(pixel);
+  }
 }
 
 function renderLedGrid() {
@@ -845,6 +911,7 @@ function toggleLed(index) {
   if (paintedColors.get(index) === color) paintedColors.delete(index);
   else paintedColors.set(index, color);
   renderLedGrid();
+  renderStrip();
   liveCurrentStep();
 }
 
@@ -852,12 +919,14 @@ function paintAll() {
   const color = stepColor.value.toLowerCase();
   for (let i = 1; i <= ledCount; i++) paintedColors.set(i, color);
   renderLedGrid();
+  renderStrip();
   liveCurrentStep();
 }
 
 function clearPaint() {
   paintedColors.clear();
   renderLedGrid();
+  renderStrip();
   liveCurrentStep();
 }
 
@@ -896,12 +965,14 @@ function addEffect() {
   if (!leds) return;
   currentEffects.push({ leds, type: effectType.value, speed: clamp(parseFloat(String(effectSpeed.value).replace(',', '.')) || 1, 0.1, 10), color: effectColor.value });
   render();
+  renderStrip();
   liveCurrentStep();
 }
 
 function deleteEffect(index) {
   currentEffects.splice(index, 1);
   render();
+  renderStrip();
   liveCurrentStep();
 }
 
@@ -966,20 +1037,46 @@ function moveSequence(direction) {
   render();
 }
 
-async function liveCurrentStep() {
+function liveCurrentStep() {
+  renderStrip();
   clearTimeout(liveTimer);
-  liveTimer = setTimeout(async () => {
+  liveTimer = setTimeout(() => {
     const groups = groupsFromMap(paintedColors).map(group => `${group.color.replace('#', '').toUpperCase()}:${group.leds || ''}`).join(';');
     const effects = currentEffects.map(effect => `FX:${effect.type}:${effect.speed || 1}:${String(effect.color || '#ffffff').replace('#', '').toUpperCase()}:${effect.leds || ''}`).join(';');
     const allGroups = [groups, effects].filter(Boolean).join(';');
     const params = new URLSearchParams({ groups: allGroups });
-    await fetch(`/live?${params}`).catch(() => {});
+    fetch(`/live?${params}`).catch(() => {});
   }, 80);
 }
 
-async function saveAll() {
-  const response = await fetch('/save', { method: 'POST', body: serialize() });
-  statusEl.textContent = await response.text();
+function saveAll() {
+  fetch('/save', { method: 'POST', body: serialize() })
+    .then(response => response.text())
+    .then(text => { statusEl.textContent = text; })
+    .catch(() => { statusEl.textContent = 'Speichern fehlgeschlagen'; });
+}
+
+function playPlaylist() {
+  const firstStep = playlist[0]?.steps[0];
+  if (firstStep) renderStrip(firstStep);
+  fetch('/play')
+    .then(response => response.text())
+    .then(text => { statusEl.textContent = text; })
+    .catch(() => { statusEl.textContent = 'Abspielen fehlgeschlagen'; });
+}
+
+function stopPlaylist() {
+  strip.innerHTML = '';
+  for (let i = 1; i <= ledCount; i++) {
+    const pixel = document.createElement('div');
+    pixel.className = 'pixel';
+    pixel.textContent = i;
+    strip.appendChild(pixel);
+  }
+  fetch('/stop')
+    .then(response => response.text())
+    .then(text => { statusEl.textContent = text; })
+    .catch(() => { statusEl.textContent = 'Stop fehlgeschlagen'; });
 }
 
 function compactSelection() {
@@ -1028,25 +1125,26 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
 
-async function load() {
-  const response = await fetch('/playlist');
-  playlist = parseStored(await response.text());
-  ledCountInput.value = ledCount;
-  if (!playlist.length) playlist = defaultPlaylist();
-  if (playlist[0].steps.length) loadStep(0);
-  render();
-}
+const loadPlaylist = () => {
+  fetch('/playlist')
+    .then(response => response.text())
+    .then(text => {
+      playlist = parseStored(text);
+      ledCountInput.value = ledCount;
+      if (!playlist.length) playlist = defaultPlaylist();
+      if (playlist[0].steps.length) loadStep(0);
+      render();
+    });
+};
 
-load();
+loadPlaylist();
 </script>
 </body>
 </html>
-)HTML";
-  return page;
-}
+)LEDSEQPAGE";
 
 void handleRoot() {
-  server.send(200, "text/html", htmlPage());
+  server.send_P(200, "text/html", INDEX_HTML);
 }
 
 void handlePlaylist() {
@@ -1067,7 +1165,58 @@ void handleSave() {
   savePlaylist(playlistText);
   parsePlaylist(playlistText);
   liveUntil = 0;
+  playbackRunning = true;
+  currentSequence = 0;
+  startCurrentSequence();
   server.send(200, "text/plain", "Gespeichert. Der RGB-Streifen laeuft jetzt eigenstaendig weiter.");
+}
+
+void handlePlay() {
+  playbackRunning = true;
+  liveUntil = 0;
+  liveGroups = "";
+  currentSequence = 0;
+  startCurrentSequence();
+  server.send(200, "text/plain", "Abspielen gestartet.");
+}
+
+void handleStop() {
+  playbackRunning = false;
+  liveUntil = 0;
+  liveGroups = "";
+  clearStrip();
+  server.send(200, "text/plain", "Gestoppt.");
+}
+
+void handleCaptivePortal() {
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  server.sendHeader("Pragma", "no-cache");
+  server.sendHeader("Expires", "-1");
+  handleRoot();
+}
+
+void startAccessPoint() {
+  WiFi.persistent(false);
+  WiFi.mode(WIFI_AP);
+  WiFi.setSleepMode(WIFI_NONE_SLEEP);
+  WiFi.setOutputPower(17.5);
+  WiFi.softAPdisconnect(true);
+  delay(100);
+  WiFi.softAPConfig(AP_IP, AP_GATEWAY, AP_SUBNET);
+  WiFi.softAP(AP_SSID, AP_PASSWORD, AP_CHANNEL, false, AP_MAX_CLIENTS);
+  dnsServer.stop();
+  dnsServer.start(DNS_PORT, "*", AP_IP);
+  MDNS.begin(MDNS_NAME);
+}
+
+void keepAccessPointAlive() {
+  unsigned long now = millis();
+  if (now - lastWifiCheckAt < WIFI_CHECK_INTERVAL_MS) return;
+  lastWifiCheckAt = now;
+
+  if ((WiFi.getMode() & WIFI_AP) == 0 || WiFi.softAPIP() != AP_IP) {
+    startAccessPoint();
+  }
 }
 
 void setup() {
@@ -1076,17 +1225,22 @@ void setup() {
   LittleFS.begin();
   loadPlaylist();
 
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP(AP_SSID, AP_PASSWORD);
+  startAccessPoint();
 
   server.on("/", HTTP_GET, handleRoot);
   server.on("/playlist", HTTP_GET, handlePlaylist);
   server.on("/live", HTTP_GET, handleLive);
   server.on("/save", HTTP_POST, handleSave);
+  server.on("/play", HTTP_GET, handlePlay);
+  server.on("/stop", HTTP_GET, handleStop);
+  server.onNotFound(handleCaptivePortal);
   server.begin();
 }
 
 void loop() {
+  keepAccessPointAlive();
+  dnsServer.processNextRequest();
+  MDNS.update();
   server.handleClient();
 
   unsigned long now = millis();
@@ -1100,9 +1254,14 @@ void loop() {
   if (liveUntil != 0 && now >= liveUntil) {
     liveUntil = 0;
     liveGroups = "";
-    startCurrentSequence();
+    if (playbackRunning) {
+      startCurrentSequence();
+    } else {
+      clearStrip();
+    }
   }
 
+  if (!playbackRunning) return;
   if (sequenceCount == 0) return;
 
   Sequence& seq = sequences[currentSequence];
