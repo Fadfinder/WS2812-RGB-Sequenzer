@@ -216,7 +216,7 @@ uint32_t effectColorBase(const String& type, uint16_t led, float speed, uint32_t
     return strip.Color(pulse / 3, pulse / 2, pulse);
   }
   if (type == "rainbow") {
-    uint16_t hue = (uint16_t)((t / 20 + led * 850) % 65535);
+    uint16_t hue = (uint16_t)((uint32_t)(millis() * speed * 6.5535) + led * 850);
     return strip.gamma32(strip.ColorHSV(hue, 240, 255));
   }
   if (type == "welder") {
@@ -507,10 +507,6 @@ void startCurrentSequence() {
 void nextSequence() {
   if (sequenceCount == 0) return;
   currentSequence = (currentSequence + 1) % sequenceCount;
-  if (!selectNextEnabledSequence(currentSequence)) {
-    clearStrip();
-    return;
-  }
   startCurrentSequence();
 }
 
@@ -1686,7 +1682,7 @@ void loop() {
   if (sequenceCount == 0) return;
 
   Sequence& seq = sequences[currentSequence];
-  if (seq.stepCount == 0) {
+  if (!seq.enabled || seq.stepCount == 0) {
     nextSequence();
     return;
   }
