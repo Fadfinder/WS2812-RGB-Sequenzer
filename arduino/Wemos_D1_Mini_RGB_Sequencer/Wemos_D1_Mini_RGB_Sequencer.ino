@@ -810,9 +810,6 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
         <label style="flex: 1 1 220px">Schrittname
           <input id="stepName" oninput="liveCurrentStep()" />
         </label>
-        <label style="width: 120px">Farbe
-          <input id="stepColor" type="color" value="#ff0000" oninput="liveCurrentStep()" />
-        </label>
         <label style="width: 170px">Schrittdauer Sekunden
           <input id="stepSeconds" type="number" min="0.02" step="0.1" value="1" oninput="liveCurrentStep()" />
         </label>
@@ -824,6 +821,11 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
         <button onclick="pasteStep()">Kopierten Schritt einfuegen</button>
       </div>
       <h3>LEDs fuer diesen Schritt</h3>
+      <div class="row" style="margin-bottom: 12px">
+        <label style="width: 120px">Farbe
+          <input id="stepColor" type="color" value="#ff0000" oninput="liveCurrentStep()" />
+        </label>
+      </div>
       <div class="led-grid" id="ledGrid"></div>
     </div>
 
