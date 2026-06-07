@@ -234,6 +234,12 @@ function defaultPlaylist() {
   ];
 }
 
+function ensureDemoSequenceInPlaylist(list) {
+  if (!Array.isArray(list) || !list.length) return defaultPlaylist();
+  if (!list.some(seq => seq.name === 'Demo_Sequenz')) list.unshift(defaultPlaylist()[0]);
+  return list;
+}
+
 function normalizeStep(step) {
   const normalized = Array.isArray(step.groups)
     ? { ...step }
@@ -667,7 +673,7 @@ function parseStored(text) {
     }
   }
   list.forEach(seq => seq.steps = (seq.steps || []).map(normalizeStep));
-  return list.length ? list : defaultPlaylist();
+  return ensureDemoSequenceInPlaylist(list.length ? list : defaultPlaylist());
 }
 
 function serialize() {
@@ -692,7 +698,7 @@ function loadLocal() {
     deviceName = normalizeDeviceName(data.deviceName || 'RGB-Sequencer');
     apPassword = normalizePassword(data.apPassword || '12345678');
     ledCount = clamp(data.ledCount || 50, 1, MAX_LEDS);
-    playlist = Array.isArray(data.playlist) && data.playlist.length ? data.playlist : defaultPlaylist();
+    playlist = ensureDemoSequenceInPlaylist(Array.isArray(data.playlist) && data.playlist.length ? data.playlist : defaultPlaylist());
     playlist.forEach(seq => seq.steps = (seq.steps || []).map(step => {
       step = normalizeStep(step);
       if (!Array.isArray(step.effects)) step.effects = [];

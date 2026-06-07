@@ -577,6 +577,56 @@ void savePlaylist(const String& text) {
   file.close();
 }
 
+String demoSequenceBlock() {
+  return String(
+    "#SEQ Demo_Sequenz|150000|1\n"
+    "5000|FFFFFF:1\n"
+    "5000|000000:1\n"
+    "5000|FF0000:1\n"
+    "5000|00FF00:1\n"
+    "5000|0000FF:1\n"
+    "5000|FX:fire:50:FFFFFF:1\n"
+    "5000|FX:storm:50:FFFFFF:1\n"
+    "5000|FX:rainbow:50:FFFFFF:1\n"
+    "5000|FX:welder:50:FFFFFF:1\n"
+    "5000|FX:camera:50:FFFFFF:1\n"
+    "5000|FX:police:50:FFFFFF:1\n"
+    "5000|FX:sparkle:50:FFFFFF:1\n"
+    "5000|FX:comet:50:FFFFFF:1\n"
+    "5000|FX:theater:50:FFFFFF:1\n"
+    "5000|FX:pulse:50:FFFFFF:1\n"
+    "5000|FX:breathe:50:FFFFFF:1\n"
+    "5000|FX:lava:50:FFFFFF:1\n"
+    "5000|FX:randomOnOff:50:FFFFFF:1\n"
+    "5000|FX:randomColor:50:FFFFFF:1\n"
+    "5000|FX:randomOnOffColor:50:FFFFFF:1\n"
+    "5000|FX:meteor:50:FFFFFF:1\n"
+    "5000|FX:twinkle:50:FFFFFF:1\n"
+    "5000|FX:candle:50:FFFFFF:1\n"
+    "5000|FX:sunrise:50:FFFFFF:1\n"
+    "5000|FX:sunset:50:FFFFFF:1\n"
+    "5000|FX:scanner:50:FFFFFF:1\n"
+    "5000|FX:confetti:50:FFFFFF:1\n"
+    "5000|FX:aurora:50:FFFFFF:1\n"
+    "5000|FX:toxic:50:FFFFFF:1\n"
+    "5000|FX:heartbeat:50:FFFFFF:1\n"
+  );
+}
+
+void ensureDemoSequence() {
+  if (playlistText.indexOf("#SEQ Demo_Sequenz|") >= 0) return;
+
+  String demo = demoSequenceBlock();
+  int firstSequence = playlistText.indexOf("#SEQ ");
+  if (firstSequence >= 0) {
+    playlistText = playlistText.substring(0, firstSequence) + demo + "\n" + playlistText.substring(firstSequence);
+  } else {
+    if (!playlistText.endsWith("\n")) playlistText += "\n";
+    playlistText += demo;
+  }
+  savePlaylist(playlistText);
+}
+
 void loadPlaylist() {
   if (LittleFS.exists("/playlist.txt")) {
     File file = LittleFS.open("/playlist.txt", "r");
@@ -585,6 +635,7 @@ void loadPlaylist() {
       file.close();
     }
   }
+  ensureDemoSequence();
   parsePlaylist(playlistText);
 }
 

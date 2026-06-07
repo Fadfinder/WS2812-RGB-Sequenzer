@@ -17,7 +17,7 @@ Ein webbasierter RGB-LED-Sequenzer fuer **Wemos D1 mini / ESP8266** und **WS2812
 - Live-Vorschau waehrend der Bearbeitung: im Stop-Modus wird jeder geladene oder geaenderte Schritt direkt auf den echten LEDs angezeigt
 - Dauerhafte Speicherung im Flash per LittleFS
 - Automatischer Start der gespeicherten Playlist nach Stromausfall oder Neustart
-- Demo_Sequenz beim ersten Start: LED 1 zeigt Weiss an/aus, Grundfarben und danach alle Effekte je 5 Sekunden
+- Demo_Sequenz wird automatisch ergaenzt, wenn sie noch fehlt: LED 1 zeigt Weiss an/aus, Grundfarben und danach alle Effekte je 5 Sekunden
 - WLAN-Name und WLAN-Kennwort in der Bedienoberflaeche aenderbar
 - Lokale Browser-Simulation ohne Hardware
 
