@@ -39,7 +39,7 @@ String playlistText =
   "\n"
   "#SEQ Mehrfarbig|20000\n"
   "10000|FF0000:1-10;0000FF:11-20\n"
-  "10000|00FF00:1,3,5,7,9;FF00FF:2,4,6,8,10;FX:fire:1:FFFFFF:21-35\n";
+  "10000|00FF00:1,3,5,7,9;FF00FF:2,4,6,8,10;FX:fire:50:FFFFFF:21-35\n";
 
 struct Step {
   uint16_t durationMs;
@@ -71,6 +71,8 @@ unsigned long apRestartAt = 0;
 String liveGroups = "";
 bool playbackRunning = true;
 
+const float DEFAULT_EFFECT_SPEED = 50.0;
+
 void applyLedCount(uint16_t count) {
   ledCount = constrain(count, 1, MAX_LEDS);
   strip.updateLength(ledCount);
@@ -93,6 +95,41 @@ uint32_t scaleColor(uint32_t color, float factor) {
   uint8_t g = ((color >> 8) & 0xFF) * factor;
   uint8_t b = (color & 0xFF) * factor;
   return strip.Color(r, g, b);
+}
+
+float effectSpeedFactor(float setting) {
+  setting = constrain(setting, 0.0, 100.0);
+  if (setting <= 50.0) {
+    return pow(300.0, (setting - 50.0) / 50.0);
+  }
+  return pow(10.0, (setting - 50.0) / 50.0);
+}
+
+unsigned long effectUpdateInterval(float setting) {
+  setting = constrain(setting, 0.0, 100.0);
+  if (setting <= 50.0) {
+    return (unsigned long)(90.0 * pow(300.0, (50.0 - setting) / 50.0));
+  }
+  return (unsigned long)(90.0 / pow(4.5, (setting - 50.0) / 50.0));
+}
+
+unsigned long effectUpdateIntervalForGroups(const String& groups) {
+  unsigned long interval = 60000;
+  int cursor = 0;
+  while (cursor < groups.length()) {
+    int end = groups.indexOf(';', cursor);
+    if (end < 0) end = groups.length();
+    String group = groups.substring(cursor, end);
+    group.trim();
+    if (group.startsWith("FX:")) {
+      int sep = group.indexOf(':', 3);
+      int sep2 = sep > 3 ? group.indexOf(':', sep + 1) : -1;
+      float setting = sep2 > sep ? group.substring(sep + 1, sep2).toFloat() : DEFAULT_EFFECT_SPEED;
+      interval = min(interval, effectUpdateInterval(setting));
+    }
+    cursor = end + 1;
+  }
+  return constrain(interval, 20UL, 300000UL);
 }
 
 void clearStrip() {
@@ -302,13 +339,13 @@ void applyStepGroups(const String& groups) {
         String type = group.substring(3, sep);
         int sep2 = group.indexOf(':', sep + 1);
         int sep3 = sep2 > sep ? group.indexOf(':', sep2 + 1) : -1;
-        float speed = 1.0;
+        float speedSetting = DEFAULT_EFFECT_SPEED;
         uint32_t color = 0xFFFFFF;
         float brightness = 1.0;
         String leds;
         if (sep3 > sep2) {
           int sep4 = group.indexOf(':', sep3 + 1);
-          speed = constrain(group.substring(sep + 1, sep2).toFloat(), 0.1, 10.0);
+          speedSetting = constrain(group.substring(sep + 1, sep2).toFloat(), 0.0, 100.0);
           color = parseColor(group.substring(sep2 + 1, sep3));
           if (sep4 > sep3) {
             brightness = constrain(group.substring(sep3 + 1, sep4).toFloat(), 0.0, 1.0);
@@ -317,12 +354,12 @@ void applyStepGroups(const String& groups) {
             leds = group.substring(sep3 + 1);
           }
         } else if (sep2 > sep) {
-          speed = constrain(group.substring(sep + 1, sep2).toFloat(), 0.1, 10.0);
+          speedSetting = constrain(group.substring(sep + 1, sep2).toFloat(), 0.0, 100.0);
           leds = group.substring(sep2 + 1);
         } else {
           leds = group.substring(sep + 1);
         }
-        applyEffectSelection(leds, type, speed, color, brightness);
+        applyEffectSelection(leds, type, effectSpeedFactor(speedSetting), color, brightness);
       }
     } else {
       int sep = group.indexOf(':');
@@ -639,8 +676,8 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
             <option value="heartbeat">Herzschlag</option>
           </select>
         </label>
-        <label style="width: 150px">Geschwindigkeit
-          <input id="effectSpeed" type="number" min="0.1" max="10" step="0.1" value="1" oninput="liveCurrentStep()" />
+        <label style="width: 150px">Geschwindigkeit 0-100
+          <input id="effectSpeed" type="number" min="0" max="100" step="1" value="50" oninput="liveCurrentStep()" />
         </label>
         <label style="width: 120px">Effektfarbe
           <input id="effectColor" type="color" value="#ffffff" oninput="liveCurrentStep()" />
@@ -701,7 +738,7 @@ function defaultPlaylist() {
     { name: 'Lauflicht Rot', durationMs: 10000, steps: Array.from({ length: Math.min(10, ledCount) }, (_, i) => ({ durationMs: 1000, groups: [{ leds: `${i + 1}`, color: '#ff0000' }], effects: [] })) },
     { name: 'Mehrfarbig', durationMs: 20000, steps: [
       { durationMs: 10000, groups: [{ leds: '1-10', color: '#ff0000' }, { leds: '11-20', color: '#0000ff' }], effects: [] },
-      { durationMs: 10000, groups: [{ leds: '1,3,5,7,9', color: '#00ff00' }, { leds: '2,4,6,8,10', color: '#ff00ff' }], effects: [{ leds: '21-35', type: 'fire', speed: 1, brightness: 1 }] }
+      { durationMs: 10000, groups: [{ leds: '1,3,5,7,9', color: '#00ff00' }, { leds: '2,4,6,8,10', color: '#ff00ff' }], effects: [{ leds: '21-35', type: 'fire', speed: 50, brightness: 1 }] }
     ] }
   ];
 }
@@ -718,7 +755,7 @@ function normalizeStep(step) {
 function stepText(step) {
   step = normalizeStep(step);
   const colors = step.groups.map(group => `${group.color} LEDs ${group.leds || 'keine'}`);
-  const effects = step.effects.map(effect => `${effectName(effect.type)} LEDs ${effect.leds} x${effect.speed || 1}, ${Math.round((effect.brightness ?? 1) * 100)}%${usesEffectColor(effect.type) ? ` ${effect.color || '#ffffff'}` : ''}`);
+  const effects = step.effects.map(effect => `${effectName(effect.type)} LEDs ${effect.leds} Speed ${effect.speed ?? 50}, ${Math.round((effect.brightness ?? 1) * 100)}%${usesEffectColor(effect.type) ? ` ${effect.color || '#ffffff'}` : ''}`);
   return [...colors, ...effects].join(' / ');
 }
 
@@ -808,10 +845,10 @@ function parseStored(text) {
         }),
         effects: parts[1].split(';').filter(group => group.startsWith('FX:')).map(group => {
           const parts = group.split(':');
-          if (parts.length >= 6) return { type: parts[1] || 'fire', speed: clamp(parseFloat(parts[2]) || 1, 0.1, 10), color: `#${parts[3] || 'ffffff'}`, brightness: clamp(parseFloat(parts[4]) || 1, 0, 1), leds: parts.slice(5).join(':') || '' };
-          if (parts.length >= 5) return { type: parts[1] || 'fire', speed: clamp(parseFloat(parts[2]) || 1, 0.1, 10), color: `#${parts[3] || 'ffffff'}`, brightness: 1, leds: parts.slice(4).join(':') || '' };
-          if (parts.length >= 4) return { type: parts[1] || 'fire', speed: clamp(parseFloat(parts[2]) || 1, 0.1, 10), color: '#ffffff', brightness: 1, leds: parts.slice(3).join(':') || '' };
-          return { type: parts[1] || 'fire', speed: 1, color: '#ffffff', brightness: 1, leds: parts[2] || '' };
+          if (parts.length >= 6) return { type: parts[1] || 'fire', speed: clamp(parseFloat(parts[2]) || 50, 0, 100), color: `#${parts[3] || 'ffffff'}`, brightness: clamp(parseFloat(parts[4]) || 1, 0, 1), leds: parts.slice(5).join(':') || '' };
+          if (parts.length >= 5) return { type: parts[1] || 'fire', speed: clamp(parseFloat(parts[2]) || 50, 0, 100), color: `#${parts[3] || 'ffffff'}`, brightness: 1, leds: parts.slice(4).join(':') || '' };
+          if (parts.length >= 4) return { type: parts[1] || 'fire', speed: clamp(parseFloat(parts[2]) || 50, 0, 100), color: '#ffffff', brightness: 1, leds: parts.slice(3).join(':') || '' };
+          return { type: parts[1] || 'fire', speed: 50, color: '#ffffff', brightness: 1, leds: parts[2] || '' };
         })
       });
     } else if (parts.length === 3 && current) {
@@ -828,7 +865,7 @@ function serialize() {
     const lines = seq.steps.map(step => {
       step = normalizeStep(step);
       const colorGroups = step.groups.map(group => `${group.color.replace('#', '').toUpperCase()}:${group.leds || ''}`);
-      const effectGroups = (step.effects || []).map(effect => `FX:${effect.type}:${effect.speed || 1}:${String(effect.color || '#ffffff').replace('#', '').toUpperCase()}:${clamp(Number(effect.brightness ?? 1), 0, 1)}:${effect.leds || ''}`);
+      const effectGroups = (step.effects || []).map(effect => `FX:${effect.type}:${clamp(Number(effect.speed ?? 50), 0, 100)}:${String(effect.color || '#ffffff').replace('#', '').toUpperCase()}:${clamp(Number(effect.brightness ?? 1), 0, 1)}:${effect.leds || ''}`);
       const groups = [...colorGroups, ...effectGroups].join(';');
       return `${Math.max(20, Math.round(step.durationMs))}|${groups}`;
     });
@@ -932,7 +969,7 @@ function renderEffects() {
     row.className = 'effect';
     const colorText = usesEffectColor(effect.type) ? `, Farbe ${effect.color || '#ffffff'}` : '';
     const colorInput = usesEffectColor(effect.type) ? `<input type="color" value="${effect.color || '#ffffff'}" oninput="updateEffectColor(${index}, this.value)">` : '';
-    row.innerHTML = `<div><strong>${effectName(effect.type)}</strong><div class="muted">LEDs ${escapeHtml(effect.leds || 'keine')}${colorText}</div></div><label class="muted">Speed <input type="number" min="0.1" max="10" step="0.1" value="${effect.speed || 1}" oninput="updateEffectSpeed(${index}, this.value)"></label><label class="muted">Helligkeit % <input type="number" min="0" max="100" step="1" value="${Math.round((effect.brightness ?? 1) * 100)}" oninput="updateEffectBrightness(${index}, this.value)"></label>${colorInput}<button class="danger" onclick="deleteEffect(${index})">X</button>`;
+    row.innerHTML = `<div><strong>${effectName(effect.type)}</strong><div class="muted">LEDs ${escapeHtml(effect.leds || 'keine')}${colorText}</div></div><label class="muted">Speed 0-100 <input type="number" min="0" max="100" step="1" value="${effect.speed ?? 50}" oninput="updateEffectSpeed(${index}, this.value)"></label><label class="muted">Helligkeit % <input type="number" min="0" max="100" step="1" value="${Math.round((effect.brightness ?? 1) * 100)}" oninput="updateEffectBrightness(${index}, this.value)"></label>${colorInput}<button class="danger" onclick="deleteEffect(${index})">X</button>`;
     effectsEl.appendChild(row);
   });
 }
@@ -1008,7 +1045,7 @@ function loadStep(index) {
   const step = normalizeStep(playlist[selectedSequence].steps[index]);
   selectedStep = index;
   paintedColors = mapFromGroups(step.groups);
-  currentEffects = step.effects.map(effect => ({ ...effect, speed: clamp(Number(effect.speed) || 1, 0.1, 10), brightness: clamp(Number(effect.brightness ?? 1), 0, 1), color: effect.color || '#ffffff' }));
+  currentEffects = step.effects.map(effect => ({ ...effect, speed: clamp(Number(effect.speed ?? 50), 0, 100), brightness: clamp(Number(effect.brightness ?? 1), 0, 1), color: effect.color || '#ffffff' }));
   stepColor.value = step.groups[0]?.color || '#ff0000';
   stepSeconds.value = msToSeconds(step.durationMs);
   render();
@@ -1018,7 +1055,7 @@ function loadStep(index) {
 function addEffect() {
   const leds = compactNumbers([...expandSelection(effectLeds.value)]);
   if (!leds) return;
-  currentEffects.push({ leds, type: effectType.value, speed: clamp(parseFloat(String(effectSpeed.value).replace(',', '.')) || 1, 0.1, 10), brightness: clamp((parseFloat(String(effectBrightness.value).replace(',', '.')) || 100) / 100, 0, 1), color: effectColor.value });
+  currentEffects.push({ leds, type: effectType.value, speed: clamp(parseFloat(String(effectSpeed.value).replace(',', '.')) || 50, 0, 100), brightness: clamp((parseFloat(String(effectBrightness.value).replace(',', '.')) || 100) / 100, 0, 1), color: effectColor.value });
   render();
   renderStrip();
   liveCurrentStep();
@@ -1026,7 +1063,7 @@ function addEffect() {
 
 function updateEffectSpeed(index, value) {
   if (!currentEffects[index]) return;
-  currentEffects[index].speed = clamp(parseFloat(String(value).replace(',', '.')) || 1, 0.1, 10);
+  currentEffects[index].speed = clamp(parseFloat(String(value).replace(',', '.')) || 0, 0, 100);
   renderStrip();
   liveCurrentStep();
 }
@@ -1118,7 +1155,7 @@ function liveCurrentStep() {
   clearTimeout(liveTimer);
   liveTimer = setTimeout(() => {
     const groups = groupsFromMap(paintedColors).map(group => `${group.color.replace('#', '').toUpperCase()}:${group.leds || ''}`).join(';');
-    const effects = currentEffects.map(effect => `FX:${effect.type}:${effect.speed || 1}:${String(effect.color || '#ffffff').replace('#', '').toUpperCase()}:${clamp(Number(effect.brightness ?? 1), 0, 1)}:${effect.leds || ''}`).join(';');
+    const effects = currentEffects.map(effect => `FX:${effect.type}:${clamp(Number(effect.speed ?? 50), 0, 100)}:${String(effect.color || '#ffffff').replace('#', '').toUpperCase()}:${clamp(Number(effect.brightness ?? 1), 0, 1)}:${effect.leds || ''}`).join(';');
     const allGroups = [groups, effects].filter(Boolean).join(';');
     const params = new URLSearchParams({ groups: allGroups });
     apiFetch(`/live?${params}`).catch(() => { statusEl.textContent = 'Keine Verbindung zum Wemos'; });
@@ -1351,7 +1388,7 @@ void loop() {
 
   unsigned long now = millis();
   if (liveUntil != 0 && now < liveUntil) {
-    if (liveGroups.indexOf("FX:") >= 0 && now - lastEffectAt >= 90) {
+    if (liveGroups.indexOf("FX:") >= 0 && now - lastEffectAt >= effectUpdateIntervalForGroups(liveGroups)) {
       applyStepGroups(liveGroups);
       lastEffectAt = now;
     }
@@ -1366,7 +1403,7 @@ void loop() {
   }
 
   if (!playbackRunning) {
-    if (liveGroups.indexOf("FX:") >= 0 && now - lastEffectAt >= 90) {
+    if (liveGroups.indexOf("FX:") >= 0 && now - lastEffectAt >= effectUpdateIntervalForGroups(liveGroups)) {
       applyStepGroups(liveGroups);
       lastEffectAt = now;
     }
@@ -1386,7 +1423,7 @@ void loop() {
   }
 
   Step& step = steps[seq.firstStep + currentStepOffset];
-  if (step.groups.indexOf("FX:") >= 0 && now - lastEffectAt >= 90) {
+  if (step.groups.indexOf("FX:") >= 0 && now - lastEffectAt >= effectUpdateIntervalForGroups(step.groups)) {
     applyStepGroups(step.groups);
     lastEffectAt = now;
   }

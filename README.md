@@ -10,7 +10,7 @@ Ein webbasierter RGB-LED-Sequenzer fuer **Wemos D1 mini / ESP8266** und **WS2812
 - Schritte bearbeiten, kopieren, einfuegen, verschieben und loeschen
 - Pro Schritt beliebige LEDs mit individuellen Farben
 - Effektgruppen pro Schritt, z. B. Feuer, Gewitter, Regenbogen, Schweißerlicht und Fotografen-Blitz
-- Effektgeschwindigkeit pro Effekt
+- Effektgeschwindigkeit pro Effekt auf einer Skala von 0 bis 100: 0 ist sehr langsam, 50 Standard, 100 sehr schnell
 - Effektfarbe fuer einfarbige Effekte
 - Live-Vorschau waehrend der Bearbeitung: im Stop-Modus wird jeder geladene oder geaenderte Schritt direkt auf den echten LEDs angezeigt
 - Dauerhafte Speicherung im Flash per LittleFS

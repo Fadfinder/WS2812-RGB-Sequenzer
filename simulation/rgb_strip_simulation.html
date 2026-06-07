@@ -146,8 +146,8 @@
             <option value="heartbeat">Herzschlag</option>
           </select>
         </label>
-        <label style="width: 150px">Geschwindigkeit
-          <input id="effectSpeed" type="number" min="0.1" max="10" step="0.1" value="1">
+        <label style="width: 150px">Geschwindigkeit 0-100
+          <input id="effectSpeed" type="number" min="0" max="100" step="1" value="50">
         </label>
         <label style="width: 120px">Effektfarbe
           <input id="effectColor" type="color" value="#ffffff">
@@ -210,7 +210,7 @@ function defaultPlaylist() {
     { name: 'Lauflicht Rot', durationMs: 10000, steps: Array.from({ length: 10 }, (_, i) => ({ durationMs: 1000, groups: [{ leds: `${i + 1}`, color: '#ff0000' }], effects: [] })) },
     { name: 'Mehrfarbig', durationMs: 20000, steps: [
       { durationMs: 10000, groups: [{ leds: '1-10', color: '#ff0000' }, { leds: '11-20', color: '#0000ff' }], effects: [] },
-      { durationMs: 10000, groups: [{ leds: '1,3,5,7,9', color: '#00ff00' }, { leds: '2,4,6,8,10', color: '#ff00ff' }], effects: [{ leds: '21-35', type: 'fire', speed: 1, color: '#ffffff' }] }
+      { durationMs: 10000, groups: [{ leds: '1,3,5,7,9', color: '#00ff00' }, { leds: '2,4,6,8,10', color: '#ff00ff' }], effects: [{ leds: '21-35', type: 'fire', speed: 50, color: '#ffffff' }] }
     ] }
   ];
 }
@@ -224,7 +224,7 @@ function stepText(step) {
   step = normalizeStep(step);
   if (!Array.isArray(step.effects)) step.effects = [];
   const colors = step.groups.map(group => `${group.color} LEDs ${group.leds || 'keine'}`);
-  const effects = step.effects.map(effect => `${effectName(effect.type)} LEDs ${effect.leds} x${effect.speed || 1}${usesEffectColor(effect.type) ? ` ${effect.color || '#ffffff'}` : ''}`);
+  const effects = step.effects.map(effect => `${effectName(effect.type)} LEDs ${effect.leds} Speed ${effect.speed ?? 50}${usesEffectColor(effect.type) ? ` ${effect.color || '#ffffff'}` : ''}`);
   return [...colors, ...effects].join(' / ');
 }
 
@@ -393,7 +393,7 @@ function renderEffects() {
     const row = document.createElement('div');
     row.className = 'effect';
     const colorText = usesEffectColor(effect.type) ? `, Farbe ${effect.color || '#ffffff'}` : '';
-    row.innerHTML = `<div><strong>${effectName(effect.type)}</strong><div class="muted">LEDs ${escapeHtml(effect.leds || 'keine')}, Geschwindigkeit x${effect.speed || 1}${colorText}</div></div><button class="danger" onclick="deleteEffect(${index})">X</button>`;
+    row.innerHTML = `<div><strong>${effectName(effect.type)}</strong><div class="muted">LEDs ${escapeHtml(effect.leds || 'keine')}, Speed ${effect.speed ?? 50}${colorText}</div></div><button class="danger" onclick="deleteEffect(${index})">X</button>`;
     effectsEl.appendChild(row);
   });
 }
@@ -481,7 +481,7 @@ function loadStep(index) {
 function addEffect() {
   const leds = compactNumbers([...expandSelection(effectLeds.value)]);
   if (!leds) return;
-  currentEffects.push({ leds, type: effectType.value, speed: clamp(parseFloat(String(effectSpeed.value).replace(',', '.')) || 1, 0.1, 10), color: effectColor.value });
+  currentEffects.push({ leds, type: effectType.value, speed: clamp(parseFloat(String(effectSpeed.value).replace(',', '.')) || 50, 0, 100), color: effectColor.value });
   render();
 }
 
@@ -607,7 +607,7 @@ function parseStored(text) {
         }),
         effects: groups.filter(group => group.startsWith('FX:')).map(group => {
           const fx = group.split(':');
-          return { type: fx[1] || 'fire', speed: clamp(parseFloat(fx[2]) || 1, 0.1, 10), color: `#${fx[3] || 'ffffff'}`, leds: fx.slice(4).join(':') || '' };
+          return { type: fx[1] || 'fire', speed: clamp(parseFloat(fx[2]) || 50, 0, 100), color: `#${fx[3] || 'ffffff'}`, leds: fx.slice(4).join(':') || '' };
         })
       });
     }
@@ -622,7 +622,7 @@ function serialize() {
     const lines = seq.steps.map(step => {
       step = normalizeStep(step);
       const colorGroups = step.groups.map(group => `${group.color.replace('#', '').toUpperCase()}:${group.leds || ''}`);
-      const effectGroups = (step.effects || []).map(effect => `FX:${effect.type}:${effect.speed || 1}:${String(effect.color || '#ffffff').replace('#', '').toUpperCase()}:${effect.leds || ''}`);
+      const effectGroups = (step.effects || []).map(effect => `FX:${effect.type}:${clamp(Number(effect.speed ?? 50), 0, 100)}:${String(effect.color || '#ffffff').replace('#', '').toUpperCase()}:${effect.leds || ''}`);
       return `${Math.max(20, Math.round(step.durationMs))}|${[...colorGroups, ...effectGroups].join(';')}`;
     });
     return [header, ...lines].join('\n');
@@ -640,7 +640,7 @@ function loadLocal() {
     playlist.forEach(seq => seq.steps = (seq.steps || []).map(step => {
       step = normalizeStep(step);
       if (!Array.isArray(step.effects)) step.effects = [];
-      step.effects = step.effects.map(effect => ({ ...effect, speed: clamp(Number(effect.speed) || 1, 0.1, 10), color: effect.color || '#ffffff' }));
+      step.effects = step.effects.map(effect => ({ ...effect, speed: clamp(Number(effect.speed ?? 50), 0, 100), color: effect.color || '#ffffff' }));
       return step;
     }));
   } else {
@@ -698,7 +698,7 @@ loadLocal();
 if (playlist[0]?.steps[0]) {
   const firstStep = normalizeStep(playlist[0].steps[0]);
   paintedColors = mapFromGroups(firstStep.groups);
-  currentEffects = Array.isArray(firstStep.effects) ? firstStep.effects.map(effect => ({ ...effect, speed: clamp(Number(effect.speed) || 1, 0.1, 10), color: effect.color || '#ffffff' })) : [];
+  currentEffects = Array.isArray(firstStep.effects) ? firstStep.effects.map(effect => ({ ...effect, speed: clamp(Number(effect.speed ?? 50), 0, 100), color: effect.color || '#ffffff' })) : [];
   stepColor.value = firstStep.groups[0]?.color || '#ff0000';
   stepSeconds.value = msToSeconds(firstStep.durationMs);
   selectedStep = 0;
