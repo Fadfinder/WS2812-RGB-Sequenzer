@@ -132,8 +132,9 @@
             <option value="pulse">Pulsieren</option>
             <option value="breathe">Atmen</option>
             <option value="lava">Lava</option>
-            <option value="ocean">Ozean</option>
-            <option value="forest">Wald</option>
+            <option value="randomOnOff">Zufall An/Aus</option>
+            <option value="randomColor">Zufall Farbe</option>
+            <option value="randomOnOffColor">Zufall An/Aus + Farbe</option>
             <option value="meteor">Meteor</option>
             <option value="twinkle">Sternfunkeln</option>
             <option value="candle">Kerze</option>
@@ -259,8 +260,9 @@ function effectName(type) {
     pulse: 'Pulsieren',
     breathe: 'Atmen',
     lava: 'Lava',
-    ocean: 'Ozean',
-    forest: 'Wald',
+    randomOnOff: 'Zufall An/Aus',
+    randomColor: 'Zufall Farbe',
+    randomOnOffColor: 'Zufall An/Aus + Farbe',
     meteor: 'Meteor',
     twinkle: 'Sternfunkeln',
     candle: 'Kerze',
@@ -275,7 +277,7 @@ function effectName(type) {
 }
 
 function usesEffectColor(type) {
-  return ['sparkle', 'comet', 'theater', 'pulse', 'breathe', 'meteor', 'twinkle', 'scanner', 'heartbeat'].includes(type);
+  return ['sparkle', 'comet', 'theater', 'pulse', 'breathe', 'randomOnOff', 'meteor', 'twinkle', 'scanner', 'heartbeat'].includes(type);
 }
 
 function render() {

@@ -153,8 +153,9 @@ Enthalten sind:
 - Pulsieren
 - Atmen
 - Lava
-- Ozean
-- Wald
+- Zufall An/Aus
+- Zufall Farbe
+- Zufall An/Aus + Farbe
 - Meteor
 - Sternfunkeln
 - Kerze

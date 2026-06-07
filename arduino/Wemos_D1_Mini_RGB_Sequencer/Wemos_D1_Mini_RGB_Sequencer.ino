@@ -233,13 +233,14 @@ uint32_t effectColorBase(const String& type, uint16_t led, float speed, uint32_t
     uint8_t v = (sin(t / 360.0 + led * 0.55) + 1.0) * 127;
     return strip.Color(120 + v / 2, 18 + v / 4, 0);
   }
-  if (type == "ocean") {
-    uint8_t v = (sin(t / 520.0 + led * 0.35) + 1.0) * 127;
-    return strip.Color(0, 45 + v / 3, 110 + v / 2);
+  if (type == "randomOnOff") {
+    return random(100) > 58 ? chosenColor : 0;
   }
-  if (type == "forest") {
-    uint8_t v = (sin(t / 620.0 + led * 0.41) + 1.0) * 127;
-    return strip.Color(2 + v / 14, 55 + v / 2, 12 + v / 6);
+  if (type == "randomColor") {
+    return strip.gamma32(strip.ColorHSV(random(65535), 230, 255));
+  }
+  if (type == "randomOnOffColor") {
+    return random(100) > 58 ? strip.gamma32(strip.ColorHSV(random(65535), 230, 255)) : 0;
   }
   if (type == "meteor") {
     int head = (t / 55) % max((uint16_t)1, ledCount);
@@ -662,8 +663,9 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
             <option value="pulse">Pulsieren</option>
             <option value="breathe">Atmen</option>
             <option value="lava">Lava</option>
-            <option value="ocean">Ozean</option>
-            <option value="forest">Wald</option>
+            <option value="randomOnOff">Zufall An/Aus</option>
+            <option value="randomColor">Zufall Farbe</option>
+            <option value="randomOnOffColor">Zufall An/Aus + Farbe</option>
             <option value="meteor">Meteor</option>
             <option value="twinkle">Sternfunkeln</option>
             <option value="candle">Kerze</option>
@@ -773,8 +775,9 @@ function effectName(type) {
     pulse: 'Pulsieren',
     breathe: 'Atmen',
     lava: 'Lava',
-    ocean: 'Ozean',
-    forest: 'Wald',
+    randomOnOff: 'Zufall An/Aus',
+    randomColor: 'Zufall Farbe',
+    randomOnOffColor: 'Zufall An/Aus + Farbe',
     meteor: 'Meteor',
     twinkle: 'Sternfunkeln',
     candle: 'Kerze',
@@ -789,7 +792,7 @@ function effectName(type) {
 }
 
 function usesEffectColor(type) {
-  return ['sparkle', 'comet', 'theater', 'pulse', 'breathe', 'meteor', 'twinkle', 'scanner', 'heartbeat'].includes(type);
+  return ['sparkle', 'comet', 'theater', 'pulse', 'breathe', 'randomOnOff', 'meteor', 'twinkle', 'scanner', 'heartbeat'].includes(type);
 }
 
 function mapFromGroups(groups) {
