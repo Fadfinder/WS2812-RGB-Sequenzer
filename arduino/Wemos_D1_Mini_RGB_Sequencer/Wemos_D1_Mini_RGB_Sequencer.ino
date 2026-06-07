@@ -753,11 +753,16 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
     <div class="sidebar-panel">
       <h3>1. Geraet und LEDs</h3>
       <label>Name / WLAN
-        <input id="deviceNameInput" maxlength="31" value="RGB-Sequencer" oninput="updateDeviceName()" />
+        <input id="deviceNameInput" maxlength="31" value="RGB-Sequencer" />
       </label>
+      <button class="ghost" onclick="applyDeviceName()">Name uebernehmen</button>
       <label>Kennwort
-        <input id="apPasswordInput" minlength="8" maxlength="63" value="12345678" oninput="updatePassword()" />
+        <input id="apPasswordInput" type="text" minlength="8" maxlength="63" value="12345678" />
       </label>
+      <label>Kennwort wiederholen
+        <input id="apPasswordConfirmInput" type="text" minlength="8" maxlength="63" value="12345678" />
+      </label>
+      <button class="ghost" onclick="applyPassword()">Kennwort uebernehmen</button>
       <label>Anzahl LEDs
         <input id="ledCountInput" type="number" min="1" max="50" value="50" onchange="changeLedCount()" />
       </label>
@@ -923,6 +928,7 @@ const effectBrightness = document.getElementById('effectBrightness');
 const statusEl = document.getElementById('status');
 const deviceNameInput = document.getElementById('deviceNameInput');
 const apPasswordInput = document.getElementById('apPasswordInput');
+const apPasswordConfirmInput = document.getElementById('apPasswordConfirmInput');
 const ledCountInput = document.getElementById('ledCountInput');
 let apPassword = '12345678';
 
@@ -1105,6 +1111,7 @@ function serialize() {
 function render() {
   deviceNameInput.value = normalizeDeviceName(deviceName);
   apPasswordInput.value = normalizePassword(apPassword);
+  apPasswordConfirmInput.value = normalizePassword(apPassword);
   ledCountInput.value = ledCount;
   if (!playlist.length) playlist = defaultPlaylist();
   selectedSequence = clamp(selectedSequence, 0, playlist.length - 1);
@@ -1142,12 +1149,27 @@ function normalizePassword(password) {
   return password.slice(0, 63);
 }
 
-function updateDeviceName() {
+function applyDeviceName() {
   deviceName = normalizeDeviceName(deviceNameInput.value);
+  deviceNameInput.value = deviceName;
+  statusEl.textContent = 'WLAN-Name uebernommen. Zum Anwenden speichern.';
 }
 
-function updatePassword() {
-  apPassword = normalizePassword(apPasswordInput.value);
+function applyPassword() {
+  const first = String(apPasswordInput.value || '').trim();
+  const second = String(apPasswordConfirmInput.value || '').trim();
+  if (first.length < 8) {
+    statusEl.textContent = 'Kennwort muss mindestens 8 Zeichen haben.';
+    return;
+  }
+  if (first !== second) {
+    statusEl.textContent = 'Kennwoerter stimmen nicht ueberein.';
+    return;
+  }
+  apPassword = normalizePassword(first);
+  apPasswordInput.value = apPassword;
+  apPasswordConfirmInput.value = apPassword;
+  statusEl.textContent = 'Kennwort uebernommen. Zum Anwenden speichern.';
 }
 
 function colorMapFromGroups(groups) {
