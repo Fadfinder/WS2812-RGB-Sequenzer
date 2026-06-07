@@ -60,7 +60,7 @@
         <input id="deviceNameInput" maxlength="31" value="RGB-Sequencer" oninput="updateDeviceName()">
       </label>
       <label>Anzahl LEDs
-        <input id="ledCountInput" type="number" min="1" max="300" value="60" onchange="changeLedCount()">
+        <input id="ledCountInput" type="number" min="1" max="50" value="50" onchange="changeLedCount()">
       </label>
       <div class="sidebar-row">
         <button class="ghost" onclick="paintAll()">Alle setzen</button>
@@ -178,9 +178,9 @@
 </main>
 
 <script>
-const MAX_LEDS = 300;
+const MAX_LEDS = 50;
 let deviceName = 'RGB-Sequencer';
-let ledCount = 60;
+let ledCount = 50;
 let playlist = [];
 let selectedSequence = 0;
 let selectedStep = -1;
@@ -408,7 +408,7 @@ function selectSequence(index) {
 }
 
 function changeLedCount() {
-  ledCount = clamp(parseInt(ledCountInput.value, 10) || 60, 1, MAX_LEDS);
+  ledCount = clamp(parseInt(ledCountInput.value, 10) || 50, 1, MAX_LEDS);
   paintedColors = new Map([...paintedColors].filter(([led]) => led <= ledCount));
   currentEffects = currentEffects.map(effect => ({ ...effect, leds: compactNumbers([...expandSelection(effect.leds)].filter(led => led <= ledCount)) }));
   render();
@@ -585,7 +585,7 @@ function parseStored(text) {
       continue;
     }
     if (line.startsWith('#COUNT')) {
-      ledCount = clamp(parseInt(line.replace('#COUNT', '').trim(), 10) || 60, 1, MAX_LEDS);
+      ledCount = clamp(parseInt(line.replace('#COUNT', '').trim(), 10) || 50, 1, MAX_LEDS);
       continue;
     }
     if (line.startsWith('#SEQ')) {
@@ -635,7 +635,7 @@ function loadLocal() {
   if (saved) {
     const data = JSON.parse(saved);
     deviceName = normalizeDeviceName(data.deviceName || 'RGB-Sequencer');
-    ledCount = clamp(data.ledCount || 60, 1, MAX_LEDS);
+    ledCount = clamp(data.ledCount || 50, 1, MAX_LEDS);
     playlist = Array.isArray(data.playlist) && data.playlist.length ? data.playlist : defaultPlaylist();
     playlist.forEach(seq => seq.steps = (seq.steps || []).map(step => {
       step = normalizeStep(step);

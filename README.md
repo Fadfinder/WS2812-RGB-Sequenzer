@@ -5,7 +5,7 @@ Ein webbasierter RGB-LED-Sequenzer fuer **Wemos D1 mini / ESP8266** und **WS2812
 ## Funktionen
 
 - Grafische Weboberflaeche direkt vom Wemos D1 mini
-- Anzahl der LEDs einstellbar
+- Anzahl der LEDs einstellbar, begrenzt auf maximal 50 LEDs fuer stabileres WLAN auf dem ESP8266
 - Mehrere Sequenzen als Playlist
 - Schritte bearbeiten, kopieren, einfuegen, verschieben und loeschen
 - Pro Schritt beliebige LEDs mit individuellen Farben

@@ -8,7 +8,7 @@
 // DIN of the WS2812B strip is connected to D4 through about 330 Ohm.
 // D4 is GPIO2 on the Wemos D1 mini.
 const uint8_t DATA_PIN = D4;
-const uint16_t MAX_LEDS = 300;
+const uint16_t MAX_LEDS = 50;
 
 const char* DEFAULT_DEVICE_NAME = "RGB-Sequencer";
 const char* AP_PASSWORD = "12345678";
@@ -25,11 +25,11 @@ ESP8266WebServer server(80);
 DNSServer dnsServer;
 Adafruit_NeoPixel strip(MAX_LEDS, DATA_PIN, NEO_GRB + NEO_KHZ800);
 
-uint16_t ledCount = 60;
+uint16_t ledCount = 50;
 String deviceName = DEFAULT_DEVICE_NAME;
 String playlistText =
   "#NAME RGB-Sequencer\n"
-  "#COUNT 60\n"
+  "#COUNT 50\n"
   "#SEQ Lauflicht Rot|10000\n"
   "1000|FF0000:1\n"
   "1000|FF0000:2\n"
@@ -71,6 +71,16 @@ unsigned long apRestartAt = 0;
 String liveGroups = "";
 bool playbackRunning = true;
 
+void applyLedCount(uint16_t count) {
+  ledCount = constrain(count, 1, MAX_LEDS);
+  strip.updateLength(ledCount);
+}
+
+void showStrip() {
+  strip.show();
+  yield();
+}
+
 uint32_t parseColor(String value) {
   value.trim();
   value.replace("#", "");
@@ -87,7 +97,7 @@ uint32_t scaleColor(uint32_t color, float factor) {
 
 void clearStrip() {
   strip.clear();
-  strip.show();
+  showStrip();
 }
 
 void applyLedSelection(const String& selection, uint32_t color) {
@@ -326,7 +336,7 @@ void applyStepGroups(const String& groups) {
     cursor = end + 1;
   }
 
-  strip.show();
+  showStrip();
 }
 
 void addSequenceHeader(String line) {
@@ -419,7 +429,7 @@ void parsePlaylist(const String& text) {
       String countText = line;
       countText.replace("#COUNT", "");
       countText.trim();
-      ledCount = constrain(countText.toInt(), 1, MAX_LEDS);
+      applyLedCount(countText.toInt());
     } else if (line.startsWith("#SEQ")) {
       addSequenceHeader(line);
     } else if (line.length() > 0 && !line.startsWith("#")) {
@@ -536,7 +546,7 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
         <input id="deviceNameInput" maxlength="31" value="RGB-Sequencer" oninput="updateDeviceName()" />
       </label>
       <label>Anzahl LEDs
-        <input id="ledCountInput" type="number" min="1" max="300" value="60" onchange="changeLedCount()" />
+        <input id="ledCountInput" type="number" min="1" max="50" value="50" onchange="changeLedCount()" />
       </label>
       <div class="sidebar-row">
         <button class="ghost" onclick="paintAll()">Alle setzen</button>
@@ -651,9 +661,9 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
 </main>
 
 <script>
-const MAX_LEDS = 300;
+const MAX_LEDS = 50;
 let deviceName = 'RGB-Sequencer';
-let ledCount = 60;
+let ledCount = 50;
 let playlist = [];
 let selectedSequence = 0;
 let selectedStep = -1;
@@ -774,7 +784,7 @@ function parseStored(text) {
       continue;
     }
     if (line.startsWith('#COUNT')) {
-      ledCount = clamp(parseInt(line.replace('#COUNT', '').trim(), 10) || 60, 1, MAX_LEDS);
+      ledCount = clamp(parseInt(line.replace('#COUNT', '').trim(), 10) || 50, 1, MAX_LEDS);
       continue;
     }
     if (line.startsWith('#SEQ')) {
@@ -937,7 +947,7 @@ function selectSequence(index) {
 }
 
 function changeLedCount() {
-  ledCount = clamp(parseInt(ledCountInput.value, 10) || 60, 1, MAX_LEDS);
+  ledCount = clamp(parseInt(ledCountInput.value, 10) || 50, 1, MAX_LEDS);
   paintedColors = new Map([...paintedColors].filter(([led]) => led <= ledCount));
   currentEffects = currentEffects.map(effect => ({ ...effect, leds: compactNumbers([...expandSelection(effect.leds)].filter(led => led <= ledCount)) }));
   render();
@@ -1311,6 +1321,7 @@ void keepAccessPointAlive() {
 
 void setup() {
   strip.begin();
+  applyLedCount(ledCount);
   clearStrip();
   LittleFS.begin();
   loadPlaylist();
