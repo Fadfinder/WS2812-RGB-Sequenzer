@@ -7,7 +7,9 @@ Ein webbasierter RGB-LED-Sequenzer fuer **Wemos D1 mini / ESP8266** und **WS2812
 - Grafische Weboberflaeche direkt vom Wemos D1 mini
 - Anzahl der LEDs einstellbar, begrenzt auf maximal 50 LEDs fuer stabileres WLAN auf dem ESP8266
 - Mehrere Sequenzen als Playlist
+- Sequenzen koennen aktiviert oder deaktiviert werden
 - Schritte bearbeiten, kopieren, einfuegen, verschieben und loeschen
+- Optional zufaellige Schrittdauer von 0 bis zu einer einstellbaren Obergrenze in 0,1-Sekunden-Schritten
 - Pro Schritt beliebige LEDs mit individuellen Farben
 - Effektgruppen pro Schritt, z. B. Feuer, Gewitter, Regenbogen, Schweißerlicht und Fotografen-Blitz
 - Effektgeschwindigkeit pro Effekt auf einer Skala von 0 bis 100: 0 ist sehr langsam, 50 Standard, 100 sehr schnell
@@ -15,6 +17,8 @@ Ein webbasierter RGB-LED-Sequenzer fuer **Wemos D1 mini / ESP8266** und **WS2812
 - Live-Vorschau waehrend der Bearbeitung: im Stop-Modus wird jeder geladene oder geaenderte Schritt direkt auf den echten LEDs angezeigt
 - Dauerhafte Speicherung im Flash per LittleFS
 - Automatischer Start der gespeicherten Playlist nach Stromausfall oder Neustart
+- Demo_Sequenz beim ersten Start: LED 1 zeigt Weiss an/aus, Grundfarben und danach alle Effekte je 5 Sekunden
+- WLAN-Name und WLAN-Kennwort in der Bedienoberflaeche aenderbar
 - Lokale Browser-Simulation ohne Hardware
 
 ## Benoetigte Hardware
@@ -112,9 +116,10 @@ Adressen die Bedienoberflaeche. Auf vielen Smartphones erscheint dadurch nach de
 Verbinden automatisch ein Anmelde-/Portal-Fenster. Auf Windows kann das wegen fester
 IP-/DNS-Einstellungen ausbleiben; dann die Adresse oben manuell oeffnen.
 
-Der Name des eigenen WLANs kann in der Bedienoberflaeche unter `Name / WLAN`
-geaendert werden. Nach `Alle Sequenzen speichern` startet der Access Point kurz neu
-und erscheint danach mit dem neuen Namen. Das Passwort bleibt `12345678`.
+Der Name und das Kennwort des eigenen WLANs koennen in der Bedienoberflaeche unter
+`Name / WLAN` und `Kennwort` geaendert werden. Das Kennwort muss mindestens 8 Zeichen
+lang sein. Nach `Alle Sequenzen speichern` startet der Access Point kurz neu und
+erscheint danach mit den neuen Zugangsdaten.
 9. LED-Anzahl einstellen, Sequenzen und Schritte erstellen.
 10. `Alle Sequenzen speichern` druecken.
 

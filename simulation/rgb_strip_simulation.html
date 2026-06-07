@@ -59,6 +59,9 @@
       <label>Name / WLAN
         <input id="deviceNameInput" maxlength="31" value="RGB-Sequencer" oninput="updateDeviceName()">
       </label>
+      <label>Kennwort
+        <input id="apPasswordInput" minlength="8" maxlength="63" value="12345678" oninput="updatePassword()">
+      </label>
       <label>Anzahl LEDs
         <input id="ledCountInput" type="number" min="1" max="50" value="50" onchange="changeLedCount()">
       </label>
@@ -94,6 +97,9 @@
         <label style="width: 170px">Schrittdauer Sekunden
           <input id="stepSeconds" type="number" min="0.02" step="0.1" value="1" oninput="liveCurrentStep()">
         </label>
+        <label style="width: 210px">Zufallsdauer bis Sekunden
+          <input id="stepRandomSeconds" type="number" min="0" max="60" step="0.1" value="0" oninput="liveCurrentStep()">
+        </label>
         <button class="primary" onclick="saveStep()">Schritt speichern</button>
         <button onclick="newStep()">Neuer Schritt</button>
         <button onclick="pasteStep()">Kopierten Schritt einfuegen</button>
@@ -108,6 +114,9 @@
         </label>
         <label style="width: 170px">Dauer Sequenz
           <input id="seqDuration" type="number" min="0.1" step="0.1" oninput="updateSequenceMeta()">
+        </label>
+        <label style="width: 130px">Aktiv
+          <input id="seqEnabled" type="checkbox" onchange="updateSequenceMeta()">
         </label>
       </div>
     </div>
@@ -196,7 +205,9 @@ const stepsEl = document.getElementById('steps');
 const effectsEl = document.getElementById('effects');
 const seqName = document.getElementById('seqName');
 const seqDuration = document.getElementById('seqDuration');
+const seqEnabled = document.getElementById('seqEnabled');
 const stepSeconds = document.getElementById('stepSeconds');
+const stepRandomSeconds = document.getElementById('stepRandomSeconds');
 const stepColor = document.getElementById('stepColor');
 const effectLeds = document.getElementById('effectLeds');
 const effectType = document.getElementById('effectType');
@@ -204,21 +215,33 @@ const effectSpeed = document.getElementById('effectSpeed');
 const effectColor = document.getElementById('effectColor');
 const statusEl = document.getElementById('status');
 const deviceNameInput = document.getElementById('deviceNameInput');
+const apPasswordInput = document.getElementById('apPasswordInput');
 const ledCountInput = document.getElementById('ledCountInput');
+let apPassword = '12345678';
+
+const EFFECT_TYPES = ['fire', 'storm', 'rainbow', 'welder', 'camera', 'police', 'sparkle', 'comet', 'theater', 'pulse', 'breathe', 'lava', 'randomOnOff', 'randomColor', 'randomOnOffColor', 'meteor', 'twinkle', 'candle', 'sunrise', 'sunset', 'scanner', 'confetti', 'aurora', 'toxic', 'heartbeat'];
 
 function defaultPlaylist() {
   return [
-    { name: 'Lauflicht Rot', durationMs: 10000, steps: Array.from({ length: 10 }, (_, i) => ({ durationMs: 1000, groups: [{ leds: `${i + 1}`, color: '#ff0000' }], effects: [] })) },
-    { name: 'Mehrfarbig', durationMs: 20000, steps: [
-      { durationMs: 10000, groups: [{ leds: '1-10', color: '#ff0000' }, { leds: '11-20', color: '#0000ff' }], effects: [] },
-      { durationMs: 10000, groups: [{ leds: '1,3,5,7,9', color: '#00ff00' }, { leds: '2,4,6,8,10', color: '#ff00ff' }], effects: [{ leds: '21-35', type: 'fire', speed: 50, color: '#ffffff' }] }
+    { name: 'Demo_Sequenz', durationMs: 150000, enabled: true, steps: [
+      { durationMs: 5000, randomMaxMs: 0, groups: [{ leds: '1', color: '#ffffff' }], effects: [] },
+      { durationMs: 5000, randomMaxMs: 0, groups: [{ leds: '1', color: '#000000' }], effects: [] },
+      { durationMs: 5000, randomMaxMs: 0, groups: [{ leds: '1', color: '#ff0000' }], effects: [] },
+      { durationMs: 5000, randomMaxMs: 0, groups: [{ leds: '1', color: '#00ff00' }], effects: [] },
+      { durationMs: 5000, randomMaxMs: 0, groups: [{ leds: '1', color: '#0000ff' }], effects: [] },
+      ...EFFECT_TYPES.map(type => ({ durationMs: 5000, randomMaxMs: 0, groups: [], effects: [{ leds: '1', type, speed: 50, brightness: 1, color: '#ffffff' }] }))
     ] }
   ];
 }
 
 function normalizeStep(step) {
-  if (Array.isArray(step.groups)) return step;
-  return { durationMs: step.durationMs || 1000, groups: [{ leds: step.leds || '', color: step.color || '#ff0000' }], effects: [] };
+  const normalized = Array.isArray(step.groups)
+    ? { ...step }
+    : { durationMs: step.durationMs || 1000, groups: [{ leds: step.leds || '', color: step.color || '#ff0000' }], effects: [] };
+  normalized.randomMaxMs = Number(normalized.randomMaxMs || 0);
+  if (!Array.isArray(normalized.effects)) normalized.effects = [];
+  normalized.effects = normalized.effects.map(effect => ({ ...effect, speed: clamp(Number(effect.speed ?? 50), 0, 100), brightness: clamp(Number(effect.brightness ?? 1), 0, 1), color: effect.color || '#ffffff' }));
+  return normalized;
 }
 
 function stepText(step) {
@@ -226,7 +249,8 @@ function stepText(step) {
   if (!Array.isArray(step.effects)) step.effects = [];
   const colors = step.groups.map(group => `${group.color} LEDs ${group.leds || 'keine'}`);
   const effects = step.effects.map(effect => `${effectName(effect.type)} LEDs ${effect.leds} Speed ${effect.speed ?? 50}${usesEffectColor(effect.type) ? ` ${effect.color || '#ffffff'}` : ''}`);
-  return [...colors, ...effects].join(' / ');
+  const randomText = step.randomMaxMs > 0 ? `Zufallsdauer bis ${msToSeconds(step.randomMaxMs)} s` : '';
+  return [...colors, ...effects, randomText].filter(Boolean).join(' / ');
 }
 
 function mapFromGroups(groups) {
@@ -282,6 +306,7 @@ function usesEffectColor(type) {
 
 function render() {
   deviceNameInput.value = normalizeDeviceName(deviceName);
+  apPasswordInput.value = normalizePassword(apPassword);
   ledCountInput.value = ledCount;
   selectedSequence = clamp(selectedSequence, 0, playlist.length - 1);
   const seq = playlist[selectedSequence];
@@ -292,12 +317,14 @@ function render() {
     const el = document.createElement('div');
     el.className = `seq-item ${index === selectedSequence ? 'active' : ''}`;
     el.onclick = () => selectSequence(index);
-    el.innerHTML = `<div><strong>${escapeHtml(item.name || 'Sequenz')}</strong><div class="seq-meta">${msToSeconds(item.durationMs)} s, ${item.steps.length} Schritte</div></div><div>${index + 1}</div>`;
+    const state = item.enabled === false ? 'inaktiv' : 'aktiv';
+    el.innerHTML = `<div><strong>${escapeHtml(item.name || 'Sequenz')}</strong><div class="seq-meta">${state}, ${msToSeconds(item.durationMs)} s, ${item.steps.length} Schritte</div></div><div>${index + 1}</div>`;
     sequenceList.appendChild(el);
   });
 
   seqName.value = seq.name || '';
   seqDuration.value = msToSeconds(seq.durationMs);
+  seqEnabled.checked = seq.enabled !== false;
   renderLedGrid();
   renderStrip();
   renderEffects();
@@ -311,8 +338,18 @@ function normalizeDeviceName(name) {
   return name.slice(0, 31);
 }
 
+function normalizePassword(password) {
+  password = String(password || '12345678').trim();
+  if (password.length < 8) password = '12345678';
+  return password.slice(0, 63);
+}
+
 function updateDeviceName() {
   deviceName = normalizeDeviceName(deviceNameInput.value);
+}
+
+function updatePassword() {
+  apPassword = normalizePassword(apPasswordInput.value);
 }
 
 function colorMapFromGroups(groups) {
@@ -349,7 +386,7 @@ function updateEditAnimation() {
 }
 
 function currentStepDraft() {
-  return { durationMs: secondsToMs(stepSeconds.value, 1), groups: groupsFromMap(paintedColors), effects: currentEffects };
+  return { durationMs: secondsToMs(stepSeconds.value, 1), randomMaxMs: secondsToOptionalMs(stepRandomSeconds.value), groups: groupsFromMap(paintedColors), effects: currentEffects };
 }
 
 function renderLedGrid() {
@@ -420,6 +457,7 @@ function updateSequenceMeta() {
   const seq = playlist[selectedSequence];
   seq.name = seqName.value;
   seq.durationMs = secondsToMs(seqDuration.value, 10);
+  seq.enabled = seqEnabled.checked;
   render();
 }
 
@@ -453,14 +491,14 @@ function newStep() {
   stop();
   const seq = playlist[selectedSequence];
   const insertAt = selectedStep >= 0 ? selectedStep + 1 : seq.steps.length;
-  seq.steps.splice(insertAt, 0, { durationMs: 1000, groups: [], effects: [] });
+  seq.steps.splice(insertAt, 0, { durationMs: 1000, randomMaxMs: 0, groups: [], effects: [] });
   loadStep(insertAt);
   statusEl.textContent = `Neuer Schritt ${insertAt + 1} angelegt`;
 }
 
 function saveStep() {
   const seq = playlist[selectedSequence];
-  const step = { durationMs: secondsToMs(stepSeconds.value, 1), groups: groupsFromMap(paintedColors), effects: currentEffects.map(effect => ({ ...effect })) };
+  const step = { durationMs: secondsToMs(stepSeconds.value, 1), randomMaxMs: secondsToOptionalMs(stepRandomSeconds.value), groups: groupsFromMap(paintedColors), effects: currentEffects.map(effect => ({ ...effect })) };
   if (selectedStep >= 0) seq.steps[selectedStep] = step;
   else {
     seq.steps.push(step);
@@ -477,6 +515,7 @@ function loadStep(index) {
   currentEffects = Array.isArray(step.effects) ? step.effects.map(effect => ({ ...effect })) : [];
   stepColor.value = step.groups[0]?.color || '#ff0000';
   stepSeconds.value = msToSeconds(step.durationMs);
+  stepRandomSeconds.value = msToSeconds(step.randomMaxMs || 0);
   render();
 }
 
@@ -527,7 +566,7 @@ function pasteStep(afterIndex = selectedStep) {
 }
 
 function addSequence() {
-  playlist.splice(selectedSequence + 1, 0, { name: 'Neue Sequenz', durationMs: 10000, steps: [] });
+  playlist.splice(selectedSequence + 1, 0, { name: 'Neue Sequenz', durationMs: 10000, enabled: true, steps: [] });
   selectedSequence += 1;
   selectedStep = -1;
   paintedColors.clear();
@@ -571,7 +610,7 @@ function stop(updateStatus = true) {
 }
 
 function saveLocal() {
-  localStorage.setItem('rgb-sim-playlist', JSON.stringify({ deviceName, ledCount, playlist }));
+  localStorage.setItem('rgb-sim-playlist', JSON.stringify({ deviceName, apPassword, ledCount, playlist }));
   statusEl.textContent = 'Im Browser gespeichert';
 }
 
@@ -579,11 +618,16 @@ function parseStored(text) {
   const list = [];
   let current = null;
   deviceName = 'RGB-Sequencer';
+  apPassword = '12345678';
   for (const raw of text.split('\n')) {
     const line = raw.trim();
     if (!line) continue;
     if (line.startsWith('#NAME')) {
       deviceName = normalizeDeviceName(line.replace('#NAME', '').trim());
+      continue;
+    }
+    if (line.startsWith('#PASS')) {
+      apPassword = normalizePassword(line.replace('#PASS', '').trim());
       continue;
     }
     if (line.startsWith('#COUNT')) {
@@ -592,17 +636,25 @@ function parseStored(text) {
     }
     if (line.startsWith('#SEQ')) {
       const body = line.replace('#SEQ', '').trim();
-      const [name, duration] = body.split('|');
-      current = { name: name || 'Sequenz', durationMs: parseInt(duration, 10) || 10000, steps: [] };
+      const [name, duration, enabled] = body.split('|');
+      current = { name: name || 'Sequenz', durationMs: parseInt(duration, 10) || 10000, enabled: enabled !== '0', steps: [] };
       list.push(current);
       continue;
     }
     if (!current || line.startsWith('#')) continue;
     const parts = line.split('|');
     if (parts.length >= 2) {
-      const groups = parts.slice(1).join('|').split(';').filter(Boolean);
+      if (parts.length === 3 && !parts[2].startsWith('RANDOM:') && !parts[1].includes(':')) {
+        current.steps.push({ durationMs: parseInt(parts[0], 10) || 1000, randomMaxMs: 0, color: `#${parts[1]}`, leds: parts[2] });
+        continue;
+      }
+      const optionIndex = parts.findIndex(part => part.startsWith('RANDOM:'));
+      const groupText = optionIndex >= 0 ? parts.slice(1, optionIndex).join('|') : parts.slice(1).join('|');
+      const groups = groupText.split(';').filter(Boolean);
+      const randomMaxMs = optionIndex >= 0 ? clamp(parseInt(parts[optionIndex].replace('RANDOM:', ''), 10) || 0, 0, 60000) : 0;
       current.steps.push({
         durationMs: parseInt(parts[0], 10) || 1000,
+        randomMaxMs,
         groups: groups.filter(group => !group.startsWith('FX:')).map(group => {
           const sep = group.indexOf(':');
           return { color: `#${group.slice(0, sep)}`, leds: group.slice(sep + 1) };
@@ -620,16 +672,17 @@ function parseStored(text) {
 
 function serialize() {
   const body = playlist.map(seq => {
-    const header = `#SEQ ${seq.name || 'Sequenz'}|${Math.max(100, Math.round(seq.durationMs || 10000))}`;
+    const header = `#SEQ ${seq.name || 'Sequenz'}|${Math.max(100, Math.round(seq.durationMs || 10000))}|${seq.enabled === false ? 0 : 1}`;
     const lines = seq.steps.map(step => {
       step = normalizeStep(step);
       const colorGroups = step.groups.map(group => `${group.color.replace('#', '').toUpperCase()}:${group.leds || ''}`);
       const effectGroups = (step.effects || []).map(effect => `FX:${effect.type}:${clamp(Number(effect.speed ?? 50), 0, 100)}:${String(effect.color || '#ffffff').replace('#', '').toUpperCase()}:${effect.leds || ''}`);
-      return `${Math.max(20, Math.round(step.durationMs))}|${[...colorGroups, ...effectGroups].join(';')}`;
+      const randomPart = step.randomMaxMs > 0 ? `|RANDOM:${Math.max(0, Math.round(step.randomMaxMs))}` : '';
+      return `${Math.max(20, Math.round(step.durationMs))}|${[...colorGroups, ...effectGroups].join(';')}${randomPart}`;
     });
     return [header, ...lines].join('\n');
   }).join('\n\n');
-  return `#NAME ${normalizeDeviceName(deviceName)}\n#COUNT ${ledCount}\n${body}`;
+  return `#NAME ${normalizeDeviceName(deviceName)}\n#PASS ${normalizePassword(apPassword)}\n#COUNT ${ledCount}\n${body}`;
 }
 
 function loadLocal() {
@@ -637,6 +690,7 @@ function loadLocal() {
   if (saved) {
     const data = JSON.parse(saved);
     deviceName = normalizeDeviceName(data.deviceName || 'RGB-Sequencer');
+    apPassword = normalizePassword(data.apPassword || '12345678');
     ledCount = clamp(data.ledCount || 50, 1, MAX_LEDS);
     playlist = Array.isArray(data.playlist) && data.playlist.length ? data.playlist : defaultPlaylist();
     playlist.forEach(seq => seq.steps = (seq.steps || []).map(step => {
@@ -684,8 +738,15 @@ function secondsToMs(value, fallback) {
   return Math.max(20, Math.round((Number.isFinite(number) ? number : fallback) * 1000));
 }
 
+function secondsToOptionalMs(value) {
+  const number = parseFloat(String(value).replace(',', '.'));
+  if (!Number.isFinite(number) || number <= 0) return 0;
+  return Math.min(60000, Math.round(number * 1000));
+}
+
 function msToSeconds(ms) {
-  return (Math.round((ms || 1000) / 100) / 10).toString();
+  if (!ms) return '0';
+  return (Math.round(ms / 100) / 10).toString();
 }
 
 function clamp(value, min, max) {
@@ -703,6 +764,7 @@ if (playlist[0]?.steps[0]) {
   currentEffects = Array.isArray(firstStep.effects) ? firstStep.effects.map(effect => ({ ...effect, speed: clamp(Number(effect.speed ?? 50), 0, 100), color: effect.color || '#ffffff' })) : [];
   stepColor.value = firstStep.groups[0]?.color || '#ff0000';
   stepSeconds.value = msToSeconds(firstStep.durationMs);
+  stepRandomSeconds.value = msToSeconds(firstStep.randomMaxMs || 0);
   selectedStep = 0;
 }
 render();
