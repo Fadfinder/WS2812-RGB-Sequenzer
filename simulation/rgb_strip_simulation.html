@@ -91,6 +91,9 @@
       <h2>LEDs und Farbe fuer den Schritt</h2>
       <div class="led-grid" id="ledGrid"></div>
       <div class="row" style="margin-top: 12px">
+        <label style="flex: 1 1 220px">Schrittname
+          <input id="stepName" oninput="liveCurrentStep()">
+        </label>
         <label style="width: 120px">Farbe
           <input id="stepColor" type="color" value="#ff0000" oninput="liveCurrentStep()">
         </label>
@@ -206,6 +209,7 @@ const effectsEl = document.getElementById('effects');
 const seqName = document.getElementById('seqName');
 const seqDuration = document.getElementById('seqDuration');
 const seqEnabled = document.getElementById('seqEnabled');
+const stepName = document.getElementById('stepName');
 const stepSeconds = document.getElementById('stepSeconds');
 const stepRandomSeconds = document.getElementById('stepRandomSeconds');
 const stepColor = document.getElementById('stepColor');
@@ -224,19 +228,26 @@ const EFFECT_TYPES = ['fire', 'storm', 'rainbow', 'welder', 'camera', 'police', 
 function defaultPlaylist() {
   return [
     { name: 'Demo_Sequenz', durationMs: 150000, enabled: true, steps: [
-      { durationMs: 5000, randomMaxMs: 0, groups: [{ leds: '1', color: '#ffffff' }], effects: [] },
-      { durationMs: 5000, randomMaxMs: 0, groups: [{ leds: '1', color: '#000000' }], effects: [] },
-      { durationMs: 5000, randomMaxMs: 0, groups: [{ leds: '1', color: '#ff0000' }], effects: [] },
-      { durationMs: 5000, randomMaxMs: 0, groups: [{ leds: '1', color: '#00ff00' }], effects: [] },
-      { durationMs: 5000, randomMaxMs: 0, groups: [{ leds: '1', color: '#0000ff' }], effects: [] },
-      ...EFFECT_TYPES.map(type => ({ durationMs: 5000, randomMaxMs: 0, groups: [], effects: [{ leds: '1', type, speed: 50, brightness: 1, color: '#ffffff' }] }))
+      { name: 'Weiss', durationMs: 7000, randomMaxMs: 0, groups: [{ leds: '1', color: '#ffffff' }], effects: [] },
+      { name: 'Pause', durationMs: 2000, randomMaxMs: 0, groups: [], effects: [] },
+      { name: 'Rot', durationMs: 7000, randomMaxMs: 0, groups: [{ leds: '1', color: '#ff0000' }], effects: [] },
+      { name: 'Pause', durationMs: 2000, randomMaxMs: 0, groups: [], effects: [] },
+      { name: 'Gruen', durationMs: 7000, randomMaxMs: 0, groups: [{ leds: '1', color: '#00ff00' }], effects: [] },
+      { name: 'Pause', durationMs: 2000, randomMaxMs: 0, groups: [], effects: [] },
+      { name: 'Blau', durationMs: 7000, randomMaxMs: 0, groups: [{ leds: '1', color: '#0000ff' }], effects: [] },
+      { name: 'Pause', durationMs: 2000, randomMaxMs: 0, groups: [], effects: [] },
+      ...EFFECT_TYPES.flatMap((type, index) => {
+        const step = { name: effectName(type), durationMs: 7000, randomMaxMs: 0, groups: [], effects: [{ leds: '1', type, speed: 50, brightness: 1, color: '#ffffff' }] };
+        return index === EFFECT_TYPES.length - 1 ? [step] : [step, { name: 'Pause', durationMs: 2000, randomMaxMs: 0, groups: [], effects: [] }];
+      })
     ] }
   ];
 }
 
 function ensureDemoSequenceInPlaylist(list) {
   if (!Array.isArray(list) || !list.length) return defaultPlaylist();
-  if (!list.some(seq => seq.name === 'Demo_Sequenz')) list.unshift(defaultPlaylist()[0]);
+  list = list.filter(seq => seq.name !== 'Demo_Sequenz');
+  list.unshift(defaultPlaylist()[0]);
   return list;
 }
 
@@ -244,6 +255,7 @@ function normalizeStep(step) {
   const normalized = Array.isArray(step.groups)
     ? { ...step }
     : { durationMs: step.durationMs || 1000, groups: [{ leds: step.leds || '', color: step.color || '#ff0000' }], effects: [] };
+  normalized.name = String(normalized.name || '');
   normalized.randomMaxMs = Number(normalized.randomMaxMs || 0);
   if (!Array.isArray(normalized.effects)) normalized.effects = [];
   normalized.effects = normalized.effects.map(effect => ({ ...effect, speed: clamp(Number(effect.speed ?? 50), 0, 100), brightness: clamp(Number(effect.brightness ?? 1), 0, 1), color: effect.color || '#ffffff' }));
@@ -257,6 +269,11 @@ function stepText(step) {
   const effects = step.effects.map(effect => `${effectName(effect.type)} LEDs ${effect.leds} Speed ${effect.speed ?? 50}${usesEffectColor(effect.type) ? ` ${effect.color || '#ffffff'}` : ''}`);
   const randomText = step.randomMaxMs > 0 ? `Zufallsdauer bis ${msToSeconds(step.randomMaxMs)} s` : '';
   return [...colors, ...effects, randomText].filter(Boolean).join(' / ');
+}
+
+function stepTitle(step, index) {
+  step = normalizeStep(step);
+  return step.name || `Schritt ${index + 1}`;
 }
 
 function mapFromGroups(groups) {
@@ -392,7 +409,7 @@ function updateEditAnimation() {
 }
 
 function currentStepDraft() {
-  return { durationMs: secondsToMs(stepSeconds.value, 1), randomMaxMs: secondsToOptionalMs(stepRandomSeconds.value), groups: groupsFromMap(paintedColors), effects: currentEffects };
+  return { name: stepName.value.trim(), durationMs: secondsToMs(stepSeconds.value, 1), randomMaxMs: secondsToOptionalMs(stepRandomSeconds.value), groups: groupsFromMap(paintedColors), effects: currentEffects };
 }
 
 function renderLedGrid() {
@@ -417,7 +434,7 @@ function renderSteps() {
     row.className = `step ${index === selectedStep ? 'active' : ''}`;
     row.onclick = () => loadStep(index);
     row.innerHTML = `
-      <div><strong>Schritt ${index + 1}</strong><div class="muted">${escapeHtml(stepText(step))}</div></div>
+      <div><strong>${escapeHtml(stepTitle(step, index))}</strong><div class="muted">${escapeHtml(stepText(step))}</div></div>
       <div>${msToSeconds(step.durationMs)} s</div>
       <button class="icon" onclick="event.stopPropagation(); copyStep(${index})">⧉</button>
       <button class="icon" onclick="event.stopPropagation(); pasteStep(${index})">＋</button>
@@ -504,7 +521,7 @@ function newStep() {
 
 function saveStep() {
   const seq = playlist[selectedSequence];
-  const step = { durationMs: secondsToMs(stepSeconds.value, 1), randomMaxMs: secondsToOptionalMs(stepRandomSeconds.value), groups: groupsFromMap(paintedColors), effects: currentEffects.map(effect => ({ ...effect })) };
+  const step = { name: stepName.value.trim(), durationMs: secondsToMs(stepSeconds.value, 1), randomMaxMs: secondsToOptionalMs(stepRandomSeconds.value), groups: groupsFromMap(paintedColors), effects: currentEffects.map(effect => ({ ...effect })) };
   if (selectedStep >= 0) seq.steps[selectedStep] = step;
   else {
     seq.steps.push(step);
@@ -519,6 +536,7 @@ function loadStep(index) {
   selectedStep = index;
   paintedColors = mapFromGroups(step.groups);
   currentEffects = Array.isArray(step.effects) ? step.effects.map(effect => ({ ...effect })) : [];
+  stepName.value = step.name || '';
   stepColor.value = step.groups[0]?.color || '#ff0000';
   stepSeconds.value = msToSeconds(step.durationMs);
   stepRandomSeconds.value = msToSeconds(step.randomMaxMs || 0);
@@ -650,15 +668,18 @@ function parseStored(text) {
     if (!current || line.startsWith('#')) continue;
     const parts = line.split('|');
     if (parts.length >= 2) {
-      if (parts.length === 3 && !parts[2].startsWith('RANDOM:') && !parts[1].includes(':')) {
+      if (parts.length === 3 && !parts[2].startsWith('RANDOM:') && !parts[2].startsWith('STEP:') && !parts[1].includes(':')) {
         current.steps.push({ durationMs: parseInt(parts[0], 10) || 1000, randomMaxMs: 0, color: `#${parts[1]}`, leds: parts[2] });
         continue;
       }
       const optionIndex = parts.findIndex(part => part.startsWith('RANDOM:'));
-      const groupText = optionIndex >= 0 ? parts.slice(1, optionIndex).join('|') : parts.slice(1).join('|');
+      const nameOption = parts.find(part => part.startsWith('STEP:')) || '';
+      const firstOptionIndex = parts.findIndex((part, index) => index > 1 && (part.startsWith('RANDOM:') || part.startsWith('STEP:')));
+      const groupText = firstOptionIndex >= 0 ? parts.slice(1, firstOptionIndex).join('|') : parts.slice(1).join('|');
       const groups = groupText.split(';').filter(Boolean);
       const randomMaxMs = optionIndex >= 0 ? clamp(parseInt(parts[optionIndex].replace('RANDOM:', ''), 10) || 0, 0, 60000) : 0;
       current.steps.push({
+        name: nameOption ? decodeURIComponent(nameOption.replace('STEP:', '')) : '',
         durationMs: parseInt(parts[0], 10) || 1000,
         randomMaxMs,
         groups: groups.filter(group => !group.startsWith('FX:')).map(group => {
@@ -684,7 +705,8 @@ function serialize() {
       const colorGroups = step.groups.map(group => `${group.color.replace('#', '').toUpperCase()}:${group.leds || ''}`);
       const effectGroups = (step.effects || []).map(effect => `FX:${effect.type}:${clamp(Number(effect.speed ?? 50), 0, 100)}:${String(effect.color || '#ffffff').replace('#', '').toUpperCase()}:${effect.leds || ''}`);
       const randomPart = step.randomMaxMs > 0 ? `|RANDOM:${Math.max(0, Math.round(step.randomMaxMs))}` : '';
-      return `${Math.max(20, Math.round(step.durationMs))}|${[...colorGroups, ...effectGroups].join(';')}${randomPart}`;
+      const namePart = step.name ? `|STEP:${encodeURIComponent(step.name)}` : '';
+      return `${Math.max(20, Math.round(step.durationMs))}|${[...colorGroups, ...effectGroups].join(';')}${randomPart}${namePart}`;
     });
     return [header, ...lines].join('\n');
   }).join('\n\n');
@@ -771,6 +793,7 @@ if (playlist[0]?.steps[0]) {
   stepColor.value = firstStep.groups[0]?.color || '#ff0000';
   stepSeconds.value = msToSeconds(firstStep.durationMs);
   stepRandomSeconds.value = msToSeconds(firstStep.randomMaxMs || 0);
+  stepName.value = firstStep.name || '';
   selectedStep = 0;
 }
 render();

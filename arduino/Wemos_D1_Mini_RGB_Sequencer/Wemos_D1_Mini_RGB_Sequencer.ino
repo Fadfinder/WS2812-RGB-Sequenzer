@@ -438,12 +438,20 @@ void addStep(String line) {
   uint16_t randomMaxMs = 0;
   String option = sep2 > sep1 ? line.substring(sep2 + 1) : "";
   option.trim();
-  String groups = (sep2 > sep1 && option.startsWith("RANDOM:")) ? line.substring(sep1 + 1, sep2) : line.substring(sep1 + 1);
+  bool hasOptions = option.startsWith("RANDOM:") || option.startsWith("STEP:");
+  String groups = (sep2 > sep1 && hasOptions) ? line.substring(sep1 + 1, sep2) : line.substring(sep1 + 1);
   groups.trim();
-  if (option.startsWith("RANDOM:")) {
-    option.trim();
-    option.replace("RANDOM:", "");
-    randomMaxMs = constrain(option.toInt(), 0, 60000);
+  int optionStart = 0;
+  while (hasOptions && optionStart < option.length()) {
+    int optionEnd = option.indexOf('|', optionStart);
+    if (optionEnd < 0) optionEnd = option.length();
+    String item = option.substring(optionStart, optionEnd);
+    item.trim();
+    if (item.startsWith("RANDOM:")) {
+      item.replace("RANDOM:", "");
+      randomMaxMs = constrain(item.toInt(), 0, 60000);
+    }
+    optionStart = optionEnd + 1;
   }
 
   int oldSep = groups.indexOf('|');
@@ -579,43 +587,77 @@ void savePlaylist(const String& text) {
 
 String demoSequenceBlock() {
   return String(
-    "#SEQ Demo_Sequenz|150000|1\n"
-    "5000|FFFFFF:1\n"
-    "5000|000000:1\n"
-    "5000|FF0000:1\n"
-    "5000|00FF00:1\n"
-    "5000|0000FF:1\n"
-    "5000|FX:fire:50:FFFFFF:1\n"
-    "5000|FX:storm:50:FFFFFF:1\n"
-    "5000|FX:rainbow:50:FFFFFF:1\n"
-    "5000|FX:welder:50:FFFFFF:1\n"
-    "5000|FX:camera:50:FFFFFF:1\n"
-    "5000|FX:police:50:FFFFFF:1\n"
-    "5000|FX:sparkle:50:FFFFFF:1\n"
-    "5000|FX:comet:50:FFFFFF:1\n"
-    "5000|FX:theater:50:FFFFFF:1\n"
-    "5000|FX:pulse:50:FFFFFF:1\n"
-    "5000|FX:breathe:50:FFFFFF:1\n"
-    "5000|FX:lava:50:FFFFFF:1\n"
-    "5000|FX:randomOnOff:50:FFFFFF:1\n"
-    "5000|FX:randomColor:50:FFFFFF:1\n"
-    "5000|FX:randomOnOffColor:50:FFFFFF:1\n"
-    "5000|FX:meteor:50:FFFFFF:1\n"
-    "5000|FX:twinkle:50:FFFFFF:1\n"
-    "5000|FX:candle:50:FFFFFF:1\n"
-    "5000|FX:sunrise:50:FFFFFF:1\n"
-    "5000|FX:sunset:50:FFFFFF:1\n"
-    "5000|FX:scanner:50:FFFFFF:1\n"
-    "5000|FX:confetti:50:FFFFFF:1\n"
-    "5000|FX:aurora:50:FFFFFF:1\n"
-    "5000|FX:toxic:50:FFFFFF:1\n"
-    "5000|FX:heartbeat:50:FFFFFF:1\n"
+    "#SEQ Demo_Sequenz|259000|1\n"
+    "7000|FFFFFF:1|STEP:Weiss\n"
+    "2000||STEP:Pause\n"
+    "7000|FF0000:1|STEP:Rot\n"
+    "2000||STEP:Pause\n"
+    "7000|00FF00:1|STEP:Gruen\n"
+    "2000||STEP:Pause\n"
+    "7000|0000FF:1|STEP:Blau\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:fire:50:FFFFFF:1|STEP:Feuerflackern\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:storm:50:FFFFFF:1|STEP:Gewitter\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:rainbow:50:FFFFFF:1|STEP:Regenbogen\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:welder:50:FFFFFF:1|STEP:Schweisserlicht\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:camera:50:FFFFFF:1|STEP:Fotografen-Blitz\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:police:50:FFFFFF:1|STEP:Polizei-Blitzer\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:sparkle:50:FFFFFF:1|STEP:Funkeln\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:comet:50:FFFFFF:1|STEP:Komet\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:theater:50:FFFFFF:1|STEP:Theater-Lauflicht\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:pulse:50:FFFFFF:1|STEP:Pulsieren\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:breathe:50:FFFFFF:1|STEP:Atmen\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:lava:50:FFFFFF:1|STEP:Lava\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:randomOnOff:50:FFFFFF:1|STEP:Zufall An Aus\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:randomColor:50:FFFFFF:1|STEP:Zufall Farbe\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:randomOnOffColor:50:FFFFFF:1|STEP:Zufall An Aus Farbe\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:meteor:50:FFFFFF:1|STEP:Meteor\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:twinkle:50:FFFFFF:1|STEP:Sternfunkeln\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:candle:50:FFFFFF:1|STEP:Kerze\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:sunrise:50:FFFFFF:1|STEP:Sonnenaufgang\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:sunset:50:FFFFFF:1|STEP:Sonnenuntergang\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:scanner:50:FFFFFF:1|STEP:Scanner\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:confetti:50:FFFFFF:1|STEP:Konfetti\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:aurora:50:FFFFFF:1|STEP:Aurora\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:toxic:50:FFFFFF:1|STEP:Giftgruen\n"
+    "2000||STEP:Pause\n"
+    "7000|FX:heartbeat:50:FFFFFF:1|STEP:Herzschlag\n"
   );
 }
 
 void ensureDemoSequence() {
-  if (playlistText.indexOf("#SEQ Demo_Sequenz|") >= 0) return;
-
+  int demoStart = playlistText.indexOf("#SEQ Demo_Sequenz|");
+  if (demoStart >= 0) {
+    int nextSequence = playlistText.indexOf("\n#SEQ ", demoStart + 1);
+    if (nextSequence >= 0) {
+      playlistText = playlistText.substring(0, demoStart) + playlistText.substring(nextSequence + 1);
+    } else {
+      playlistText = playlistText.substring(0, demoStart);
+    }
+  }
   String demo = demoSequenceBlock();
   int firstSequence = playlistText.indexOf("#SEQ ");
   if (firstSequence >= 0) {
@@ -765,6 +807,9 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
     <div class="panel">
       <h2>5. Aktuellen Schritt bearbeiten</h2>
       <div class="row">
+        <label style="flex: 1 1 220px">Schrittname
+          <input id="stepName" oninput="liveCurrentStep()" />
+        </label>
         <label style="width: 120px">Farbe
           <input id="stepColor" type="color" value="#ff0000" oninput="liveCurrentStep()" />
         </label>
@@ -864,6 +909,7 @@ const effectsEl = document.getElementById('effects');
 const seqName = document.getElementById('seqName');
 const seqDuration = document.getElementById('seqDuration');
 const seqEnabled = document.getElementById('seqEnabled');
+const stepName = document.getElementById('stepName');
 const stepSeconds = document.getElementById('stepSeconds');
 const stepRandomSeconds = document.getElementById('stepRandomSeconds');
 const stepColor = document.getElementById('stepColor');
@@ -883,12 +929,18 @@ const EFFECT_TYPES = ['fire', 'storm', 'rainbow', 'welder', 'camera', 'police', 
 function defaultPlaylist() {
   return [
     { name: 'Demo_Sequenz', durationMs: 150000, enabled: true, steps: [
-      { durationMs: 5000, randomMaxMs: 0, groups: [{ leds: '1', color: '#ffffff' }], effects: [] },
-      { durationMs: 5000, randomMaxMs: 0, groups: [{ leds: '1', color: '#000000' }], effects: [] },
-      { durationMs: 5000, randomMaxMs: 0, groups: [{ leds: '1', color: '#ff0000' }], effects: [] },
-      { durationMs: 5000, randomMaxMs: 0, groups: [{ leds: '1', color: '#00ff00' }], effects: [] },
-      { durationMs: 5000, randomMaxMs: 0, groups: [{ leds: '1', color: '#0000ff' }], effects: [] },
-      ...EFFECT_TYPES.map(type => ({ durationMs: 5000, randomMaxMs: 0, groups: [], effects: [{ leds: '1', type, speed: 50, brightness: 1, color: '#ffffff' }] }))
+      { name: 'Weiss', durationMs: 7000, randomMaxMs: 0, groups: [{ leds: '1', color: '#ffffff' }], effects: [] },
+      { name: 'Pause', durationMs: 2000, randomMaxMs: 0, groups: [], effects: [] },
+      { name: 'Rot', durationMs: 7000, randomMaxMs: 0, groups: [{ leds: '1', color: '#ff0000' }], effects: [] },
+      { name: 'Pause', durationMs: 2000, randomMaxMs: 0, groups: [], effects: [] },
+      { name: 'Gruen', durationMs: 7000, randomMaxMs: 0, groups: [{ leds: '1', color: '#00ff00' }], effects: [] },
+      { name: 'Pause', durationMs: 2000, randomMaxMs: 0, groups: [], effects: [] },
+      { name: 'Blau', durationMs: 7000, randomMaxMs: 0, groups: [{ leds: '1', color: '#0000ff' }], effects: [] },
+      { name: 'Pause', durationMs: 2000, randomMaxMs: 0, groups: [], effects: [] },
+      ...EFFECT_TYPES.flatMap((type, index) => {
+        const step = { name: effectName(type), durationMs: 7000, randomMaxMs: 0, groups: [], effects: [{ leds: '1', type, speed: 50, brightness: 1, color: '#ffffff' }] };
+        return index === EFFECT_TYPES.length - 1 ? [step] : [step, { name: 'Pause', durationMs: 2000, randomMaxMs: 0, groups: [], effects: [] }];
+      })
     ] }
   ];
 }
@@ -897,6 +949,7 @@ function normalizeStep(step) {
   const normalized = Array.isArray(step.groups)
     ? { ...step }
     : { durationMs: step.durationMs || 1000, groups: [{ leds: step.leds || '', color: step.color || '#ff0000' }] };
+  normalized.name = String(normalized.name || '');
   normalized.randomMaxMs = Number(normalized.randomMaxMs || 0);
   if (!Array.isArray(normalized.effects)) normalized.effects = [];
   normalized.effects = normalized.effects.map(effect => ({ ...effect, speed: clamp(Number(effect.speed ?? 50), 0, 100), brightness: clamp(Number(effect.brightness ?? 1), 0, 1) }));
@@ -909,6 +962,11 @@ function stepText(step) {
   const effects = step.effects.map(effect => `${effectName(effect.type)} LEDs ${effect.leds} Speed ${effect.speed ?? 50}, ${Math.round((effect.brightness ?? 1) * 100)}%${usesEffectColor(effect.type) ? ` ${effect.color || '#ffffff'}` : ''}`);
   const randomText = step.randomMaxMs > 0 ? `Zufallsdauer bis ${msToSeconds(step.randomMaxMs)} s` : '';
   return [...colors, ...effects, randomText].filter(Boolean).join(' / ');
+}
+
+function stepTitle(step, index) {
+  step = normalizeStep(step);
+  return step.name || `Schritt ${index + 1}`;
 }
 
 function effectName(type) {
@@ -996,14 +1054,17 @@ function parseStored(text) {
     }
     const parts = line.split('|');
     if (parts.length >= 2 && current) {
-      if (parts.length === 3 && !parts[2].startsWith('RANDOM:') && !parts[1].includes(':')) {
+      if (parts.length === 3 && !parts[2].startsWith('RANDOM:') && !parts[2].startsWith('STEP:') && !parts[1].includes(':')) {
         current.steps.push({ durationMs: parseInt(parts[0], 10) || 1000, randomMaxMs: 0, color: `#${parts[1]}`, leds: parts[2] });
         continue;
       }
-      const option = parts[2] || '';
+      const options = parts.slice(2);
+      const randomOption = options.find(part => part.startsWith('RANDOM:')) || '';
+      const nameOption = options.find(part => part.startsWith('STEP:')) || '';
       current.steps.push({
+        name: nameOption ? decodeURIComponent(nameOption.replace('STEP:', '')) : '',
         durationMs: parseInt(parts[0], 10) || 1000,
-        randomMaxMs: option.startsWith('RANDOM:') ? clamp(parseInt(option.replace('RANDOM:', ''), 10) || 0, 0, 60000) : 0,
+        randomMaxMs: randomOption ? clamp(parseInt(randomOption.replace('RANDOM:', ''), 10) || 0, 0, 60000) : 0,
         groups: parts[1].split(';').filter(Boolean).filter(group => !group.startsWith('FX:')).map(group => {
           const sep = group.indexOf(':');
           return { color: `#${group.slice(0, sep)}`, leds: group.slice(sep + 1) };
@@ -1031,7 +1092,8 @@ function serialize() {
       const effectGroups = (step.effects || []).map(effect => `FX:${effect.type}:${clamp(Number(effect.speed ?? 50), 0, 100)}:${String(effect.color || '#ffffff').replace('#', '').toUpperCase()}:${clamp(Number(effect.brightness ?? 1), 0, 1)}:${effect.leds || ''}`);
       const groups = [...colorGroups, ...effectGroups].join(';');
       const randomPart = step.randomMaxMs > 0 ? `|RANDOM:${Math.max(0, Math.round(step.randomMaxMs))}` : '';
-      return `${Math.max(20, Math.round(step.durationMs))}|${groups}${randomPart}`;
+      const namePart = step.name ? `|STEP:${encodeURIComponent(step.name)}` : '';
+      return `${Math.max(20, Math.round(step.durationMs))}|${groups}${randomPart}${namePart}`;
     });
     return [header, ...lines].join('\n');
   }).join('\n\n');
@@ -1095,7 +1157,7 @@ function colorMapFromGroups(groups) {
 }
 
 function currentStepDraft() {
-  return { durationMs: secondsToMs(stepSeconds.value, 1), randomMaxMs: secondsToOptionalMs(stepRandomSeconds.value), groups: groupsFromMap(paintedColors), effects: currentEffects };
+  return { name: stepName.value.trim(), durationMs: secondsToMs(stepSeconds.value, 1), randomMaxMs: secondsToOptionalMs(stepRandomSeconds.value), groups: groupsFromMap(paintedColors), effects: currentEffects };
 }
 
 function renderStrip(step = currentStepDraft()) {
@@ -1124,7 +1186,7 @@ function renderSteps() {
     row.className = `step ${index === selectedStep ? 'active' : ''}`;
     row.onclick = () => loadStep(index);
     row.innerHTML = `
-      <div><strong>Schritt ${index + 1}</strong><div class="muted">${escapeHtml(stepText(step))}</div></div>
+      <div><strong>${escapeHtml(stepTitle(step, index))}</strong><div class="muted">${escapeHtml(stepText(step))}</div></div>
       <div>${msToSeconds(step.durationMs)} s</div>
       <button class="icon" onclick="event.stopPropagation(); copyStep(${index})">⧉</button>
       <button class="icon" onclick="event.stopPropagation(); pasteStep(${index})">＋</button>
@@ -1210,7 +1272,7 @@ function newStep() {
 
 function saveStep() {
   const seq = playlist[selectedSequence];
-  const step = { durationMs: secondsToMs(stepSeconds.value, 1), randomMaxMs: secondsToOptionalMs(stepRandomSeconds.value), groups: groupsFromMap(paintedColors), effects: currentEffects.map(effect => ({ ...effect })) };
+  const step = { name: stepName.value.trim(), durationMs: secondsToMs(stepSeconds.value, 1), randomMaxMs: secondsToOptionalMs(stepRandomSeconds.value), groups: groupsFromMap(paintedColors), effects: currentEffects.map(effect => ({ ...effect })) };
   if (selectedStep >= 0) seq.steps[selectedStep] = step;
   else {
     seq.steps.push(step);
@@ -1224,6 +1286,7 @@ function loadStep(index) {
   selectedStep = index;
   paintedColors = mapFromGroups(step.groups);
   currentEffects = step.effects.map(effect => ({ ...effect, speed: clamp(Number(effect.speed ?? 50), 0, 100), brightness: clamp(Number(effect.brightness ?? 1), 0, 1), color: effect.color || '#ffffff' }));
+  stepName.value = step.name || '';
   stepColor.value = step.groups[0]?.color || '#ff0000';
   stepSeconds.value = msToSeconds(step.durationMs);
   stepRandomSeconds.value = msToSeconds(step.randomMaxMs || 0);

@@ -9,6 +9,7 @@ Ein webbasierter RGB-LED-Sequenzer fuer **Wemos D1 mini / ESP8266** und **WS2812
 - Mehrere Sequenzen als Playlist
 - Sequenzen koennen aktiviert oder deaktiviert werden
 - Schritte bearbeiten, kopieren, einfuegen, verschieben und loeschen
+- Schritte koennen benannt und umbenannt werden
 - Optional zufaellige Schrittdauer von 0 bis zu einer einstellbaren Obergrenze in 0,1-Sekunden-Schritten
 - Pro Schritt beliebige LEDs mit individuellen Farben
 - Effektgruppen pro Schritt, z. B. Feuer, Gewitter, Regenbogen, Schweißerlicht und Fotografen-Blitz
@@ -17,7 +18,7 @@ Ein webbasierter RGB-LED-Sequenzer fuer **Wemos D1 mini / ESP8266** und **WS2812
 - Live-Vorschau waehrend der Bearbeitung: im Stop-Modus wird jeder geladene oder geaenderte Schritt direkt auf den echten LEDs angezeigt
 - Dauerhafte Speicherung im Flash per LittleFS
 - Automatischer Start der gespeicherten Playlist nach Stromausfall oder Neustart
-- Demo_Sequenz wird automatisch ergaenzt, wenn sie noch fehlt: LED 1 zeigt Weiss an/aus, Grundfarben und danach alle Effekte je 5 Sekunden
+- Demo_Sequenz wird beim Start automatisch ueberschrieben: LED 1 zeigt Weiss, Grundfarben und danach alle Effekte je 7 Sekunden, dazwischen jeweils 2 Sekunden Pause
 - WLAN-Name und WLAN-Kennwort in der Bedienoberflaeche aenderbar
 - Lokale Browser-Simulation ohne Hardware
 
