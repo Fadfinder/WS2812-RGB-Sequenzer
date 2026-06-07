@@ -10,7 +10,7 @@
 const uint8_t DATA_PIN = D4;
 const uint16_t MAX_LEDS = 300;
 
-const char* AP_SSID = "RGB-Sequencer";
+const char* DEFAULT_DEVICE_NAME = "RGB-Sequencer";
 const char* AP_PASSWORD = "12345678";
 const char* MDNS_NAME = "rgb-sequencer";
 const uint16_t DNS_PORT = 53;
@@ -26,7 +26,9 @@ DNSServer dnsServer;
 Adafruit_NeoPixel strip(MAX_LEDS, DATA_PIN, NEO_GRB + NEO_KHZ800);
 
 uint16_t ledCount = 60;
+String deviceName = DEFAULT_DEVICE_NAME;
 String playlistText =
+  "#NAME RGB-Sequencer\n"
   "#COUNT 60\n"
   "#SEQ Lauflicht Rot|10000\n"
   "1000|FF0000:1\n"
@@ -65,6 +67,7 @@ unsigned long sequenceStartedAt = 0;
 unsigned long liveUntil = 0;
 unsigned long lastEffectAt = 0;
 unsigned long lastWifiCheckAt = 0;
+unsigned long apRestartAt = 0;
 String liveGroups = "";
 bool playbackRunning = true;
 
@@ -94,7 +97,6 @@ void applyLedSelection(const String& selection, uint32_t color) {
 
   if (text == "ALLE" || text == "ALL") {
     for (uint16_t i = 0; i < ledCount; i++) strip.setPixelColor(i, color);
-    strip.show();
     return;
   }
 
@@ -128,11 +130,9 @@ void applyLedSelection(const String& selection, uint32_t color) {
 
     cursor = comma + 1;
   }
-
-  strip.show();
 }
 
-uint32_t effectColor(const String& type, uint16_t led, float speed, uint32_t chosenColor) {
+uint32_t effectColorBase(const String& type, uint16_t led, float speed, uint32_t chosenColor) {
   unsigned long t = (unsigned long)(millis() * speed);
   if (type == "fire") {
     return strip.Color(random(120, 256), random(18, 112), random(0, 9));
@@ -243,7 +243,11 @@ uint32_t effectColor(const String& type, uint16_t led, float speed, uint32_t cho
   return 0;
 }
 
-void applyEffectSelection(const String& selection, const String& type, float speed, uint32_t chosenColor) {
+uint32_t effectColor(const String& type, uint16_t led, float speed, uint32_t chosenColor, float brightness) {
+  return scaleColor(effectColorBase(type, led, speed, chosenColor), constrain(brightness, 0.0, 1.0));
+}
+
+void applyEffectSelection(const String& selection, const String& type, float speed, uint32_t chosenColor, float brightness) {
   String text = selection;
   text.replace(" ", "");
   text.toUpperCase();
@@ -265,7 +269,7 @@ void applyEffectSelection(const String& selection, const String& type, float spe
     }
 
     for (int led = first; led <= last; led++) {
-      if (led >= 1 && led <= ledCount) strip.setPixelColor(led - 1, effectColor(type, led, speed, chosenColor));
+      if (led >= 1 && led <= ledCount) strip.setPixelColor(led - 1, effectColor(type, led, speed, chosenColor, brightness));
     }
 
     cursor = comma + 1;
@@ -290,18 +294,25 @@ void applyStepGroups(const String& groups) {
         int sep3 = sep2 > sep ? group.indexOf(':', sep2 + 1) : -1;
         float speed = 1.0;
         uint32_t color = 0xFFFFFF;
+        float brightness = 1.0;
         String leds;
         if (sep3 > sep2) {
+          int sep4 = group.indexOf(':', sep3 + 1);
           speed = constrain(group.substring(sep + 1, sep2).toFloat(), 0.1, 10.0);
           color = parseColor(group.substring(sep2 + 1, sep3));
-          leds = group.substring(sep3 + 1);
+          if (sep4 > sep3) {
+            brightness = constrain(group.substring(sep3 + 1, sep4).toFloat(), 0.0, 1.0);
+            leds = group.substring(sep4 + 1);
+          } else {
+            leds = group.substring(sep3 + 1);
+          }
         } else if (sep2 > sep) {
           speed = constrain(group.substring(sep + 1, sep2).toFloat(), 0.1, 10.0);
           leds = group.substring(sep2 + 1);
         } else {
           leds = group.substring(sep + 1);
         }
-        applyEffectSelection(leds, type, speed, color);
+        applyEffectSelection(leds, type, speed, color, brightness);
       }
     } else {
       int sep = group.indexOf(':');
@@ -380,9 +391,17 @@ void nextSequence() {
   startCurrentSequence();
 }
 
+String normalizeDeviceName(String name) {
+  name.trim();
+  if (name.length() == 0) name = DEFAULT_DEVICE_NAME;
+  if (name.length() > 31) name = name.substring(0, 31);
+  return name;
+}
+
 void parsePlaylist(const String& text) {
   sequenceCount = 0;
   totalStepCount = 0;
+  deviceName = DEFAULT_DEVICE_NAME;
 
   int start = 0;
   while (start < text.length()) {
@@ -392,7 +411,11 @@ void parsePlaylist(const String& text) {
     String line = text.substring(start, end);
     line.trim();
 
-    if (line.startsWith("#COUNT")) {
+    if (line.startsWith("#NAME")) {
+      String nameText = line;
+      nameText.replace("#NAME", "");
+      deviceName = normalizeDeviceName(nameText);
+    } else if (line.startsWith("#COUNT")) {
       String countText = line;
       countText.replace("#COUNT", "");
       countText.trim();
@@ -449,19 +472,19 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
     :root { font-family: system-ui, sans-serif; color: #172033; background: #eef2f7; }
     * { box-sizing: border-box; }
     body { margin: 0; background: #eef2f7; color: #172033; }
-    main { display: grid; grid-template-columns: 380px 1fr 320px; min-height: 100vh; }
+    main { display: grid; grid-template-columns: 380px 1fr; min-height: 100vh; }
     aside, section { padding: 18px; }
     aside { background: #182235; color: #f8fafc; }
     h1 { font-size: 22px; margin: 0 0 18px; }
     h2 { font-size: 18px; margin: 0 0 12px; }
     h3 { font-size: 15px; margin: 18px 0 8px; }
     button, input, select { font: inherit; }
-    button { border: 0; border-radius: 7px; padding: 9px 11px; font-weight: 700; cursor: pointer; background: #dbe4f0; color: #172033; }
+    button { border: 0; border-radius: 9px; min-height: 44px; padding: 10px 12px; font-weight: 700; cursor: pointer; background: #dbe4f0; color: #172033; touch-action: manipulation; }
     button.primary { background: #22c55e; color: #052e16; }
     button.danger { background: #f97316; color: #431407; }
     button.ghost { background: #2a3650; color: #f8fafc; }
-    button.icon { width: 36px; height: 36px; padding: 0; }
-    input, select { width: 100%; border: 1px solid #cbd5e1; border-radius: 7px; padding: 9px; background: #fff; color: #172033; }
+    button.icon { width: 44px; height: 44px; padding: 0; }
+    input, select { width: 100%; min-height: 44px; border: 1px solid #cbd5e1; border-radius: 9px; padding: 10px; background: #fff; color: #172033; }
     aside input, aside select { border-color: #475569; }
     .seq-list { display: grid; gap: 8px; }
     .seq-item { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; padding: 10px; border-radius: 8px; background: #26334b; color: #f8fafc; cursor: pointer; }
@@ -472,12 +495,9 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
     .sidebar-row button { flex: 1 1 0; padding-left: 8px; padding-right: 8px; }
     .sidebar-panel { margin-bottom: 18px; }
     .sidebar-panel label { display: block; margin-bottom: 8px; }
-    .panel { background: #fff; border: 1px solid #d7dee8; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-    .strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(30px, 1fr)); gap: 8px; max-height: 270px; overflow: auto; padding: 10px; background: #0f172a; border-radius: 8px; }
-    .pixel { aspect-ratio: 1; border-radius: 50%; background: #1f2937; border: 2px solid #334155; color: #94a3b8; display: grid; place-items: center; font-size: 11px; font-weight: 800; }
-    .pixel.on { color: #fff; border-color: rgba(255,255,255,.78); box-shadow: 0 0 14px currentColor; }
-    .led-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 8px; max-height: 360px; overflow: auto; padding: 2px; }
-    .led-btn { min-height: 42px; border: 2px solid #cbd5e1; background: #f8fafc; }
+    .panel { background: #fff; border: 1px solid #d7dee8; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+    .led-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 8px; max-height: 45vh; overflow: auto; padding: 2px; -webkit-overflow-scrolling: touch; }
+    .led-btn { min-height: 48px; border: 2px solid #cbd5e1; background: #f8fafc; }
     .led-btn.on { color: #fff; border-color: #111827; }
     .steps { display: grid; gap: 8px; }
     .step { display: grid; grid-template-columns: 1fr auto repeat(5, auto); gap: 8px; align-items: center; padding: 10px; background: #f8fafc; border: 1px solid #d7dee8; border-radius: 8px; }
@@ -487,7 +507,22 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
     .status { min-height: 24px; color: #166534; font-weight: 800; }
     .muted { color: #64748b; font-size: 14px; }
     .swatch { display: inline-block; width: 18px; height: 18px; border-radius: 4px; border: 1px solid #475569; vertical-align: middle; margin-right: 6px; }
-    @media (max-width: 920px) { main { grid-template-columns: 1fr; } aside { order: 1; } section { order: 2; } }
+    @media (max-width: 1050px) { main { grid-template-columns: 1fr; } aside { order: 1; } section { order: 2; } }
+    @media (max-width: 640px) {
+      body { font-size: 16px; }
+      aside, section { padding: 12px; }
+      h1 { font-size: 21px; margin-bottom: 12px; }
+      h2 { font-size: 17px; }
+      .panel { padding: 12px; margin-bottom: 12px; }
+      .row, .sidebar-row { display: grid; grid-template-columns: 1fr; gap: 10px; }
+      .row label, .sidebar-row button { width: 100% !important; }
+      .led-grid { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); max-height: 38vh; }
+      .led-btn { min-height: 52px; }
+      .step { grid-template-columns: 1fr repeat(5, 44px); gap: 6px; }
+      .step > div:nth-child(2) { grid-column: 1 / -1; }
+      .effect { grid-template-columns: 1fr; }
+      .effect input, .effect button { width: 100%; }
+    }
   </style>
 </head>
 <body>
@@ -496,7 +531,10 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
     <h1>RGB Sequencer</h1>
 
     <div class="sidebar-panel">
-      <h3>Streifen</h3>
+      <h3>1. Geraet und LEDs</h3>
+      <label>Name / WLAN
+        <input id="deviceNameInput" maxlength="31" value="RGB-Sequencer" oninput="updateDeviceName()" />
+      </label>
       <label>Anzahl LEDs
         <input id="ledCountInput" type="number" min="1" max="300" value="60" onchange="changeLedCount()" />
       </label>
@@ -507,7 +545,7 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
     </div>
 
     <div class="seq-list" id="sequenceList"></div>
-    <h3>Playlist</h3>
+    <h3>2. Sequenzen</h3>
     <div class="sidebar-row">
       <button class="ghost" onclick="addSequence()">Neu</button>
       <button class="ghost" onclick="moveSequence(-1)">Hoch</button>
@@ -518,28 +556,18 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
 
   <section>
     <div class="panel">
-      <h2>Simulierter LED-Streifen</h2>
-      <div class="strip" id="strip"></div>
-    </div>
-
-    <div class="panel">
-      <h2>LEDs und Farbe fuer den Schritt</h2>
-      <div class="led-grid" id="ledGrid"></div>
-      <div class="row" style="margin-top: 12px">
-        <label style="width: 120px">Farbe
-          <input id="stepColor" type="color" value="#ff0000" oninput="liveCurrentStep()" />
-        </label>
-        <label style="width: 170px">Schrittdauer Sekunden
-          <input id="stepSeconds" type="number" min="0.02" step="0.1" value="1" oninput="liveCurrentStep()" />
-        </label>
-        <button class="primary" onclick="saveStep()">Schritt speichern</button>
-        <button onclick="newStep()">Neuer Schritt</button>
-        <button onclick="pasteStep()">Kopierten Schritt einfuegen</button>
+      <h2>3. Steuerung</h2>
+      <div class="row">
+        <button class="primary" onclick="playPlaylist()">Abspielen</button>
+        <button onclick="stopPlaylist()">Stop</button>
+        <button class="primary" onclick="saveAll()">Alle Sequenzen speichern</button>
       </div>
+      <p id="status" class="status"></p>
+      <p class="muted">Ohne Abspielen wird der aktuell bearbeitete Schritt live auf den LEDs angezeigt.</p>
     </div>
 
     <div class="panel">
-      <h2>Sequenz bearbeiten</h2>
+      <h2>4. Sequenz bearbeiten</h2>
       <div class="row">
         <label style="flex: 1 1 260px">Name
           <input id="seqName" oninput="updateSequenceMeta()" />
@@ -551,7 +579,24 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
     </div>
 
     <div class="panel">
-      <h2>Effekt fuer LED-Gruppe</h2>
+      <h2>5. Aktuellen Schritt bearbeiten</h2>
+      <div class="row">
+        <label style="width: 120px">Farbe
+          <input id="stepColor" type="color" value="#ff0000" oninput="liveCurrentStep()" />
+        </label>
+        <label style="width: 170px">Schrittdauer Sekunden
+          <input id="stepSeconds" type="number" min="0.02" step="0.1" value="1" oninput="liveCurrentStep()" />
+        </label>
+        <button class="primary" onclick="saveStep()">Schritt speichern</button>
+        <button onclick="newStep()">Neuer Schritt</button>
+        <button onclick="pasteStep()">Kopierten Schritt einfuegen</button>
+      </div>
+      <h3>LEDs fuer diesen Schritt</h3>
+      <div class="led-grid" id="ledGrid"></div>
+    </div>
+
+    <div class="panel">
+      <h2>6. Effekte im aktuellen Schritt</h2>
       <div class="row">
         <label style="width: 180px">LEDs
           <input id="effectLeds" value="1-20" />
@@ -590,34 +635,24 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
         <label style="width: 120px">Effektfarbe
           <input id="effectColor" type="color" value="#ffffff" oninput="liveCurrentStep()" />
         </label>
+        <label style="width: 160px">Helligkeit %
+          <input id="effectBrightness" type="number" min="0" max="100" step="1" value="100" oninput="liveCurrentStep()" />
+        </label>
         <button onclick="addEffect()">Effekt hinzufuegen</button>
       </div>
       <div class="effects" id="effects"></div>
     </div>
 
     <div class="panel">
-      <h2>Schritte dieser Sequenz</h2>
+      <h2>7. Schritte dieser Sequenz</h2>
       <div class="steps" id="steps"></div>
-    </div>
-  </section>
-
-  <section>
-    <div class="panel">
-      <h2>Steuerung</h2>
-      <div class="row">
-        <button class="primary" onclick="playPlaylist()">Abspielen</button>
-        <button onclick="stopPlaylist()">Stop</button>
-      </div>
-      <h2 style="margin-top:18px">Speichern</h2>
-      <button class="primary" onclick="saveAll()">Alle Sequenzen speichern</button>
-      <p id="status" class="status"></p>
-      <p class="muted">Beim Bearbeiten leuchtet der Streifen live. Nach dem Speichern laeuft der Wemos ohne Browser weiter.</p>
     </div>
   </section>
 </main>
 
 <script>
 const MAX_LEDS = 300;
+let deviceName = 'RGB-Sequencer';
 let ledCount = 60;
 let playlist = [];
 let selectedSequence = 0;
@@ -626,9 +661,15 @@ let paintedColors = new Map();
 let currentEffects = [];
 let copiedStep = null;
 let liveTimer = null;
+const API_BASE = (location.hostname === '127.0.0.1' || location.protocol === 'file:')
+  ? 'http://192.168.178.99'
+  : '';
+
+function apiFetch(path, options = {}) {
+  return fetch(API_BASE + path, { cache: 'no-store', ...options });
+}
 
 const sequenceList = document.getElementById('sequenceList');
-const strip = document.getElementById('strip');
 const ledGrid = document.getElementById('ledGrid');
 const stepsEl = document.getElementById('steps');
 const effectsEl = document.getElementById('effects');
@@ -640,7 +681,9 @@ const effectLeds = document.getElementById('effectLeds');
 const effectType = document.getElementById('effectType');
 const effectSpeed = document.getElementById('effectSpeed');
 const effectColor = document.getElementById('effectColor');
+const effectBrightness = document.getElementById('effectBrightness');
 const statusEl = document.getElementById('status');
+const deviceNameInput = document.getElementById('deviceNameInput');
 const ledCountInput = document.getElementById('ledCountInput');
 
 function defaultPlaylist() {
@@ -648,7 +691,7 @@ function defaultPlaylist() {
     { name: 'Lauflicht Rot', durationMs: 10000, steps: Array.from({ length: Math.min(10, ledCount) }, (_, i) => ({ durationMs: 1000, groups: [{ leds: `${i + 1}`, color: '#ff0000' }], effects: [] })) },
     { name: 'Mehrfarbig', durationMs: 20000, steps: [
       { durationMs: 10000, groups: [{ leds: '1-10', color: '#ff0000' }, { leds: '11-20', color: '#0000ff' }], effects: [] },
-      { durationMs: 10000, groups: [{ leds: '1,3,5,7,9', color: '#00ff00' }, { leds: '2,4,6,8,10', color: '#ff00ff' }], effects: [{ leds: '21-35', type: 'fire', speed: 1 }] }
+      { durationMs: 10000, groups: [{ leds: '1,3,5,7,9', color: '#00ff00' }, { leds: '2,4,6,8,10', color: '#ff00ff' }], effects: [{ leds: '21-35', type: 'fire', speed: 1, brightness: 1 }] }
     ] }
   ];
 }
@@ -658,13 +701,14 @@ function normalizeStep(step) {
     ? step
     : { durationMs: step.durationMs || 1000, groups: [{ leds: step.leds || '', color: step.color || '#ff0000' }] };
   if (!Array.isArray(normalized.effects)) normalized.effects = [];
+  normalized.effects = normalized.effects.map(effect => ({ ...effect, brightness: clamp(Number(effect.brightness ?? 1), 0, 1) }));
   return normalized;
 }
 
 function stepText(step) {
   step = normalizeStep(step);
   const colors = step.groups.map(group => `${group.color} LEDs ${group.leds || 'keine'}`);
-  const effects = step.effects.map(effect => `${effectName(effect.type)} LEDs ${effect.leds} x${effect.speed || 1}${usesEffectColor(effect.type) ? ` ${effect.color || '#ffffff'}` : ''}`);
+  const effects = step.effects.map(effect => `${effectName(effect.type)} LEDs ${effect.leds} x${effect.speed || 1}, ${Math.round((effect.brightness ?? 1) * 100)}%${usesEffectColor(effect.type) ? ` ${effect.color || '#ffffff'}` : ''}`);
   return [...colors, ...effects].join(' / ');
 }
 
@@ -721,9 +765,14 @@ function groupsFromMap(colors) {
 function parseStored(text) {
   const list = [];
   let current = null;
+  deviceName = 'RGB-Sequencer';
   for (const raw of text.split('\n')) {
     const line = raw.trim();
     if (!line) continue;
+    if (line.startsWith('#NAME')) {
+      deviceName = normalizeDeviceName(line.replace('#NAME', '').trim());
+      continue;
+    }
     if (line.startsWith('#COUNT')) {
       ledCount = clamp(parseInt(line.replace('#COUNT', '').trim(), 10) || 60, 1, MAX_LEDS);
       continue;
@@ -749,9 +798,10 @@ function parseStored(text) {
         }),
         effects: parts[1].split(';').filter(group => group.startsWith('FX:')).map(group => {
           const parts = group.split(':');
-          if (parts.length >= 5) return { type: parts[1] || 'fire', speed: clamp(parseFloat(parts[2]) || 1, 0.1, 10), color: `#${parts[3] || 'ffffff'}`, leds: parts.slice(4).join(':') || '' };
-          if (parts.length >= 4) return { type: parts[1] || 'fire', speed: clamp(parseFloat(parts[2]) || 1, 0.1, 10), color: '#ffffff', leds: parts.slice(3).join(':') || '' };
-          return { type: parts[1] || 'fire', speed: 1, color: '#ffffff', leds: parts[2] || '' };
+          if (parts.length >= 6) return { type: parts[1] || 'fire', speed: clamp(parseFloat(parts[2]) || 1, 0.1, 10), color: `#${parts[3] || 'ffffff'}`, brightness: clamp(parseFloat(parts[4]) || 1, 0, 1), leds: parts.slice(5).join(':') || '' };
+          if (parts.length >= 5) return { type: parts[1] || 'fire', speed: clamp(parseFloat(parts[2]) || 1, 0.1, 10), color: `#${parts[3] || 'ffffff'}`, brightness: 1, leds: parts.slice(4).join(':') || '' };
+          if (parts.length >= 4) return { type: parts[1] || 'fire', speed: clamp(parseFloat(parts[2]) || 1, 0.1, 10), color: '#ffffff', brightness: 1, leds: parts.slice(3).join(':') || '' };
+          return { type: parts[1] || 'fire', speed: 1, color: '#ffffff', brightness: 1, leds: parts[2] || '' };
         })
       });
     } else if (parts.length === 3 && current) {
@@ -768,16 +818,17 @@ function serialize() {
     const lines = seq.steps.map(step => {
       step = normalizeStep(step);
       const colorGroups = step.groups.map(group => `${group.color.replace('#', '').toUpperCase()}:${group.leds || ''}`);
-      const effectGroups = (step.effects || []).map(effect => `FX:${effect.type}:${effect.speed || 1}:${String(effect.color || '#ffffff').replace('#', '').toUpperCase()}:${effect.leds || ''}`);
+      const effectGroups = (step.effects || []).map(effect => `FX:${effect.type}:${effect.speed || 1}:${String(effect.color || '#ffffff').replace('#', '').toUpperCase()}:${clamp(Number(effect.brightness ?? 1), 0, 1)}:${effect.leds || ''}`);
       const groups = [...colorGroups, ...effectGroups].join(';');
       return `${Math.max(20, Math.round(step.durationMs))}|${groups}`;
     });
     return [header, ...lines].join('\n');
   }).join('\n\n');
-  return `#COUNT ${ledCount}\n${body}`;
+  return `#NAME ${normalizeDeviceName(deviceName)}\n#COUNT ${ledCount}\n${body}`;
 }
 
 function render() {
+  deviceNameInput.value = normalizeDeviceName(deviceName);
   ledCountInput.value = ledCount;
   if (!playlist.length) playlist = defaultPlaylist();
   selectedSequence = clamp(selectedSequence, 0, playlist.length - 1);
@@ -801,6 +852,16 @@ function render() {
   renderSteps();
 }
 
+function normalizeDeviceName(name) {
+  name = String(name || 'RGB-Sequencer').trim();
+  if (!name) name = 'RGB-Sequencer';
+  return name.slice(0, 31);
+}
+
+function updateDeviceName() {
+  deviceName = normalizeDeviceName(deviceNameInput.value);
+}
+
 function colorMapFromGroups(groups) {
   const colors = new Map();
   for (const group of groups || []) {
@@ -814,24 +875,7 @@ function currentStepDraft() {
 }
 
 function renderStrip(step = currentStepDraft()) {
-  step = normalizeStep(step);
-  const colors = colorMapFromGroups(step.groups);
-  for (const effect of step.effects || []) {
-    const effectColor = usesEffectColor(effect.type) ? (effect.color || '#ffffff') : '#38bdf8';
-    for (const led of expandSelection(effect.leds)) colors.set(led, effectColor);
-  }
-  strip.innerHTML = '';
-  for (let i = 1; i <= ledCount; i++) {
-    const pixel = document.createElement('div');
-    const color = colors.get(i);
-    pixel.className = `pixel ${color ? 'on' : ''}`;
-    pixel.textContent = i;
-    if (color) {
-      pixel.style.background = color;
-      pixel.style.color = color;
-    }
-    strip.appendChild(pixel);
-  }
+  // Keine Browser-Simulation mehr. Die echten LEDs werden weiterhin per /live aktualisiert.
 }
 
 function renderLedGrid() {
@@ -877,7 +921,8 @@ function renderEffects() {
     const row = document.createElement('div');
     row.className = 'effect';
     const colorText = usesEffectColor(effect.type) ? `, Farbe ${effect.color || '#ffffff'}` : '';
-    row.innerHTML = `<div><strong>${effectName(effect.type)}</strong><div class="muted">LEDs ${escapeHtml(effect.leds || 'keine')}, Geschwindigkeit x${effect.speed || 1}${colorText}</div></div><button class="danger" onclick="deleteEffect(${index})">X</button>`;
+    const colorInput = usesEffectColor(effect.type) ? `<input type="color" value="${effect.color || '#ffffff'}" oninput="updateEffectColor(${index}, this.value)">` : '';
+    row.innerHTML = `<div><strong>${effectName(effect.type)}</strong><div class="muted">LEDs ${escapeHtml(effect.leds || 'keine')}${colorText}</div></div><label class="muted">Speed <input type="number" min="0.1" max="10" step="0.1" value="${effect.speed || 1}" oninput="updateEffectSpeed(${index}, this.value)"></label><label class="muted">Helligkeit % <input type="number" min="0" max="100" step="1" value="${Math.round((effect.brightness ?? 1) * 100)}" oninput="updateEffectBrightness(${index}, this.value)"></label>${colorInput}<button class="danger" onclick="deleteEffect(${index})">X</button>`;
     effectsEl.appendChild(row);
   });
 }
@@ -953,7 +998,7 @@ function loadStep(index) {
   const step = normalizeStep(playlist[selectedSequence].steps[index]);
   selectedStep = index;
   paintedColors = mapFromGroups(step.groups);
-  currentEffects = step.effects.map(effect => ({ ...effect, speed: clamp(Number(effect.speed) || 1, 0.1, 10), color: effect.color || '#ffffff' }));
+  currentEffects = step.effects.map(effect => ({ ...effect, speed: clamp(Number(effect.speed) || 1, 0.1, 10), brightness: clamp(Number(effect.brightness ?? 1), 0, 1), color: effect.color || '#ffffff' }));
   stepColor.value = step.groups[0]?.color || '#ff0000';
   stepSeconds.value = msToSeconds(step.durationMs);
   render();
@@ -963,8 +1008,29 @@ function loadStep(index) {
 function addEffect() {
   const leds = compactNumbers([...expandSelection(effectLeds.value)]);
   if (!leds) return;
-  currentEffects.push({ leds, type: effectType.value, speed: clamp(parseFloat(String(effectSpeed.value).replace(',', '.')) || 1, 0.1, 10), color: effectColor.value });
+  currentEffects.push({ leds, type: effectType.value, speed: clamp(parseFloat(String(effectSpeed.value).replace(',', '.')) || 1, 0.1, 10), brightness: clamp((parseFloat(String(effectBrightness.value).replace(',', '.')) || 100) / 100, 0, 1), color: effectColor.value });
   render();
+  renderStrip();
+  liveCurrentStep();
+}
+
+function updateEffectSpeed(index, value) {
+  if (!currentEffects[index]) return;
+  currentEffects[index].speed = clamp(parseFloat(String(value).replace(',', '.')) || 1, 0.1, 10);
+  renderStrip();
+  liveCurrentStep();
+}
+
+function updateEffectBrightness(index, value) {
+  if (!currentEffects[index]) return;
+  currentEffects[index].brightness = clamp((parseFloat(String(value).replace(',', '.')) || 0) / 100, 0, 1);
+  renderStrip();
+  liveCurrentStep();
+}
+
+function updateEffectColor(index, value) {
+  if (!currentEffects[index]) return;
+  currentEffects[index].color = value || '#ffffff';
   renderStrip();
   liveCurrentStep();
 }
@@ -1042,40 +1108,34 @@ function liveCurrentStep() {
   clearTimeout(liveTimer);
   liveTimer = setTimeout(() => {
     const groups = groupsFromMap(paintedColors).map(group => `${group.color.replace('#', '').toUpperCase()}:${group.leds || ''}`).join(';');
-    const effects = currentEffects.map(effect => `FX:${effect.type}:${effect.speed || 1}:${String(effect.color || '#ffffff').replace('#', '').toUpperCase()}:${effect.leds || ''}`).join(';');
+    const effects = currentEffects.map(effect => `FX:${effect.type}:${effect.speed || 1}:${String(effect.color || '#ffffff').replace('#', '').toUpperCase()}:${clamp(Number(effect.brightness ?? 1), 0, 1)}:${effect.leds || ''}`).join(';');
     const allGroups = [groups, effects].filter(Boolean).join(';');
     const params = new URLSearchParams({ groups: allGroups });
-    fetch(`/live?${params}`).catch(() => {});
+    apiFetch(`/live?${params}`).catch(() => { statusEl.textContent = 'Keine Verbindung zum Wemos'; });
   }, 80);
 }
 
 function saveAll() {
-  fetch('/save', { method: 'POST', body: serialize() })
+  apiFetch('/save', { method: 'POST', body: serialize() })
     .then(response => response.text())
-    .then(text => { statusEl.textContent = text; })
+    .then(text => { statusEl.textContent = text; liveCurrentStep(); })
     .catch(() => { statusEl.textContent = 'Speichern fehlgeschlagen'; });
 }
 
 function playPlaylist() {
   const firstStep = playlist[0]?.steps[0];
   if (firstStep) renderStrip(firstStep);
-  fetch('/play')
+  apiFetch('/play')
     .then(response => response.text())
     .then(text => { statusEl.textContent = text; })
     .catch(() => { statusEl.textContent = 'Abspielen fehlgeschlagen'; });
 }
 
 function stopPlaylist() {
-  strip.innerHTML = '';
-  for (let i = 1; i <= ledCount; i++) {
-    const pixel = document.createElement('div');
-    pixel.className = 'pixel';
-    pixel.textContent = i;
-    strip.appendChild(pixel);
-  }
-  fetch('/stop')
+  renderStrip();
+  apiFetch('/stop')
     .then(response => response.text())
-    .then(text => { statusEl.textContent = text; })
+    .then(text => { statusEl.textContent = text; liveCurrentStep(); })
     .catch(() => { statusEl.textContent = 'Stop fehlgeschlagen'; });
 }
 
@@ -1126,7 +1186,7 @@ function escapeHtml(value) {
 }
 
 const loadPlaylist = () => {
-  fetch('/playlist')
+  apiFetch('/playlist')
     .then(response => response.text())
     .then(text => {
       playlist = parseStored(text);
@@ -1143,23 +1203,42 @@ loadPlaylist();
 </html>
 )LEDSEQPAGE";
 
+void addDefaultHeaders() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  server.sendHeader("Pragma", "no-cache");
+  server.sendHeader("Expires", "-1");
+}
+
+void handleOptions() {
+  addDefaultHeaders();
+  server.send(204, "text/plain", "");
+}
+
 void handleRoot() {
+  addDefaultHeaders();
   server.send_P(200, "text/html", INDEX_HTML);
 }
 
 void handlePlaylist() {
+  addDefaultHeaders();
   server.send(200, "text/plain", playlistText);
 }
 
 void handleLive() {
   String groups = server.arg("groups");
   liveGroups = groups;
+  liveUntil = playbackRunning ? millis() + 3000 : 0;
   applyStepGroups(groups);
-  liveUntil = millis() + 3000;
+  lastEffectAt = millis();
+  addDefaultHeaders();
   server.send(200, "text/plain", "OK");
 }
 
 void handleSave() {
+  String oldDeviceName = deviceName;
   playlistText = server.arg("plain");
   playlistText.replace("\r", "");
   savePlaylist(playlistText);
@@ -1168,7 +1247,9 @@ void handleSave() {
   playbackRunning = true;
   currentSequence = 0;
   startCurrentSequence();
+  addDefaultHeaders();
   server.send(200, "text/plain", "Gespeichert. Der RGB-Streifen laeuft jetzt eigenstaendig weiter.");
+  if (oldDeviceName != deviceName) apRestartAt = millis() + 1200;
 }
 
 void handlePlay() {
@@ -1177,21 +1258,25 @@ void handlePlay() {
   liveGroups = "";
   currentSequence = 0;
   startCurrentSequence();
+  addDefaultHeaders();
   server.send(200, "text/plain", "Abspielen gestartet.");
 }
 
 void handleStop() {
   playbackRunning = false;
   liveUntil = 0;
-  liveGroups = "";
-  clearStrip();
-  server.send(200, "text/plain", "Gestoppt.");
+  if (liveGroups.length() > 0) {
+    applyStepGroups(liveGroups);
+  }
+  addDefaultHeaders();
+  server.send(200, "text/plain", "Gestoppt. Aktueller Schritt bleibt sichtbar.");
 }
 
 void handleCaptivePortal() {
-  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  server.sendHeader("Pragma", "no-cache");
-  server.sendHeader("Expires", "-1");
+  if (server.method() == HTTP_OPTIONS) {
+    handleOptions();
+    return;
+  }
   handleRoot();
 }
 
@@ -1203,7 +1288,7 @@ void startAccessPoint() {
   WiFi.softAPdisconnect(true);
   delay(100);
   WiFi.softAPConfig(AP_IP, AP_GATEWAY, AP_SUBNET);
-  WiFi.softAP(AP_SSID, AP_PASSWORD, AP_CHANNEL, false, AP_MAX_CLIENTS);
+  WiFi.softAP(deviceName.c_str(), AP_PASSWORD, AP_CHANNEL, false, AP_MAX_CLIENTS);
   dnsServer.stop();
   dnsServer.start(DNS_PORT, "*", AP_IP);
   MDNS.begin(MDNS_NAME);
@@ -1211,6 +1296,11 @@ void startAccessPoint() {
 
 void keepAccessPointAlive() {
   unsigned long now = millis();
+  if (apRestartAt != 0 && now >= apRestartAt) {
+    apRestartAt = 0;
+    startAccessPoint();
+    return;
+  }
   if (now - lastWifiCheckAt < WIFI_CHECK_INTERVAL_MS) return;
   lastWifiCheckAt = now;
 
@@ -1228,11 +1318,16 @@ void setup() {
   startAccessPoint();
 
   server.on("/", HTTP_GET, handleRoot);
+  server.on("/", HTTP_OPTIONS, handleOptions);
   server.on("/playlist", HTTP_GET, handlePlaylist);
   server.on("/live", HTTP_GET, handleLive);
+  server.on("/live", HTTP_OPTIONS, handleOptions);
   server.on("/save", HTTP_POST, handleSave);
+  server.on("/save", HTTP_OPTIONS, handleOptions);
   server.on("/play", HTTP_GET, handlePlay);
+  server.on("/play", HTTP_OPTIONS, handleOptions);
   server.on("/stop", HTTP_GET, handleStop);
+  server.on("/stop", HTTP_OPTIONS, handleOptions);
   server.onNotFound(handleCaptivePortal);
   server.begin();
 }
@@ -1256,12 +1351,16 @@ void loop() {
     liveGroups = "";
     if (playbackRunning) {
       startCurrentSequence();
-    } else {
-      clearStrip();
     }
   }
 
-  if (!playbackRunning) return;
+  if (!playbackRunning) {
+    if (liveGroups.indexOf("FX:") >= 0 && now - lastEffectAt >= 90) {
+      applyStepGroups(liveGroups);
+      lastEffectAt = now;
+    }
+    return;
+  }
   if (sequenceCount == 0) return;
 
   Sequence& seq = sequences[currentSequence];

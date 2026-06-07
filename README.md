@@ -12,8 +12,9 @@ Ein webbasierter RGB-LED-Sequenzer fuer **Wemos D1 mini / ESP8266** und **WS2812
 - Effektgruppen pro Schritt, z. B. Feuer, Gewitter, Regenbogen, Schweißerlicht und Fotografen-Blitz
 - Effektgeschwindigkeit pro Effekt
 - Effektfarbe fuer einfarbige Effekte
-- Live-Vorschau waehrend der Bearbeitung
+- Live-Vorschau waehrend der Bearbeitung: im Stop-Modus wird jeder geladene oder geaenderte Schritt direkt auf den echten LEDs angezeigt
 - Dauerhafte Speicherung im Flash per LittleFS
+- Automatischer Start der gespeicherten Playlist nach Stromausfall oder Neustart
 - Lokale Browser-Simulation ohne Hardware
 
 ## Benoetigte Hardware
@@ -110,10 +111,21 @@ Der Wemos beantwortet ausserdem DNS-Anfragen im eigenen WLAN und zeigt fuer unbe
 Adressen die Bedienoberflaeche. Auf vielen Smartphones erscheint dadurch nach dem
 Verbinden automatisch ein Anmelde-/Portal-Fenster. Auf Windows kann das wegen fester
 IP-/DNS-Einstellungen ausbleiben; dann die Adresse oben manuell oeffnen.
-8. LED-Anzahl einstellen, Sequenzen und Schritte erstellen.
-9. `Alle Sequenzen speichern` druecken.
 
-Nach dem Speichern laeuft die Playlist eigenstaendig weiter.
+Der Name des eigenen WLANs kann in der Bedienoberflaeche unter `Name / WLAN`
+geaendert werden. Nach `Alle Sequenzen speichern` startet der Access Point kurz neu
+und erscheint danach mit dem neuen Namen. Das Passwort bleibt `12345678`.
+9. LED-Anzahl einstellen, Sequenzen und Schritte erstellen.
+10. `Alle Sequenzen speichern` druecken.
+
+Nach dem Speichern laeuft die Playlist eigenstaendig weiter. Nach einem Neustart oder
+Stromausfall startet der Wemos die gespeicherte Playlist automatisch wieder.
+
+`Stop` haelt die automatische Playlist an und schaltet in den Bearbeitungsmodus. In
+diesem Zustand wird der aktuell ausgewaehlte Schritt dauerhaft live auf den echten
+LEDs angezeigt. Wenn du eine LED-Farbe, einen Effekt oder den Schritt wechselst, wird
+das sofort am LED-Streifen sichtbar. Mit `Abspielen` startet die normale Playlist
+wieder ab Anfang.
 
 ## Simulation
 

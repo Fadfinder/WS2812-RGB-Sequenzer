@@ -56,6 +56,9 @@
 
     <div class="sidebar-panel">
       <h3>Streifen</h3>
+      <label>Name / WLAN
+        <input id="deviceNameInput" maxlength="31" value="RGB-Sequencer" oninput="updateDeviceName()">
+      </label>
       <label>Anzahl LEDs
         <input id="ledCountInput" type="number" min="1" max="300" value="60" onchange="changeLedCount()">
       </label>
@@ -169,13 +172,14 @@
         <button onclick="saveLocal()">Im Browser speichern</button>
       </div>
       <p id="status" class="status"></p>
-      <p class="muted">Diese Datei simuliert die spaetere ESP32-Weboberflaeche lokal im Browser. Deine Daten werden nur im Browser gespeichert.</p>
+      <p class="muted">Diese Datei simuliert die Wemos-Weboberflaeche lokal im Browser. Deine Daten werden nur im Browser gespeichert.</p>
     </div>
   </section>
 </main>
 
 <script>
 const MAX_LEDS = 300;
+let deviceName = 'RGB-Sequencer';
 let ledCount = 60;
 let playlist = [];
 let selectedSequence = 0;
@@ -198,6 +202,7 @@ const effectType = document.getElementById('effectType');
 const effectSpeed = document.getElementById('effectSpeed');
 const effectColor = document.getElementById('effectColor');
 const statusEl = document.getElementById('status');
+const deviceNameInput = document.getElementById('deviceNameInput');
 const ledCountInput = document.getElementById('ledCountInput');
 
 function defaultPlaylist() {
@@ -274,6 +279,7 @@ function usesEffectColor(type) {
 }
 
 function render() {
+  deviceNameInput.value = normalizeDeviceName(deviceName);
   ledCountInput.value = ledCount;
   selectedSequence = clamp(selectedSequence, 0, playlist.length - 1);
   const seq = playlist[selectedSequence];
@@ -295,6 +301,16 @@ function render() {
   renderEffects();
   renderSteps();
   updateEditAnimation();
+}
+
+function normalizeDeviceName(name) {
+  name = String(name || 'RGB-Sequencer').trim();
+  if (!name) name = 'RGB-Sequencer';
+  return name.slice(0, 31);
+}
+
+function updateDeviceName() {
+  deviceName = normalizeDeviceName(deviceNameInput.value);
 }
 
 function colorMapFromGroups(groups) {
@@ -428,6 +444,7 @@ function clearPaint() {
 
 function liveCurrentStep() {
   // Changing the color input only changes the brush, not already painted LEDs.
+  renderStrip();
 }
 
 function newStep() {
@@ -552,14 +569,72 @@ function stop(updateStatus = true) {
 }
 
 function saveLocal() {
-  localStorage.setItem('rgb-sim-playlist', JSON.stringify({ ledCount, playlist }));
+  localStorage.setItem('rgb-sim-playlist', JSON.stringify({ deviceName, ledCount, playlist }));
   statusEl.textContent = 'Im Browser gespeichert';
+}
+
+function parseStored(text) {
+  const list = [];
+  let current = null;
+  deviceName = 'RGB-Sequencer';
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith('#NAME')) {
+      deviceName = normalizeDeviceName(line.replace('#NAME', '').trim());
+      continue;
+    }
+    if (line.startsWith('#COUNT')) {
+      ledCount = clamp(parseInt(line.replace('#COUNT', '').trim(), 10) || 60, 1, MAX_LEDS);
+      continue;
+    }
+    if (line.startsWith('#SEQ')) {
+      const body = line.replace('#SEQ', '').trim();
+      const [name, duration] = body.split('|');
+      current = { name: name || 'Sequenz', durationMs: parseInt(duration, 10) || 10000, steps: [] };
+      list.push(current);
+      continue;
+    }
+    if (!current || line.startsWith('#')) continue;
+    const parts = line.split('|');
+    if (parts.length >= 2) {
+      const groups = parts.slice(1).join('|').split(';').filter(Boolean);
+      current.steps.push({
+        durationMs: parseInt(parts[0], 10) || 1000,
+        groups: groups.filter(group => !group.startsWith('FX:')).map(group => {
+          const sep = group.indexOf(':');
+          return { color: `#${group.slice(0, sep)}`, leds: group.slice(sep + 1) };
+        }),
+        effects: groups.filter(group => group.startsWith('FX:')).map(group => {
+          const fx = group.split(':');
+          return { type: fx[1] || 'fire', speed: clamp(parseFloat(fx[2]) || 1, 0.1, 10), color: `#${fx[3] || 'ffffff'}`, leds: fx.slice(4).join(':') || '' };
+        })
+      });
+    }
+  }
+  list.forEach(seq => seq.steps = (seq.steps || []).map(normalizeStep));
+  return list.length ? list : defaultPlaylist();
+}
+
+function serialize() {
+  const body = playlist.map(seq => {
+    const header = `#SEQ ${seq.name || 'Sequenz'}|${Math.max(100, Math.round(seq.durationMs || 10000))}`;
+    const lines = seq.steps.map(step => {
+      step = normalizeStep(step);
+      const colorGroups = step.groups.map(group => `${group.color.replace('#', '').toUpperCase()}:${group.leds || ''}`);
+      const effectGroups = (step.effects || []).map(effect => `FX:${effect.type}:${effect.speed || 1}:${String(effect.color || '#ffffff').replace('#', '').toUpperCase()}:${effect.leds || ''}`);
+      return `${Math.max(20, Math.round(step.durationMs))}|${[...colorGroups, ...effectGroups].join(';')}`;
+    });
+    return [header, ...lines].join('\n');
+  }).join('\n\n');
+  return `#NAME ${normalizeDeviceName(deviceName)}\n#COUNT ${ledCount}\n${body}`;
 }
 
 function loadLocal() {
   const saved = localStorage.getItem('rgb-sim-playlist');
   if (saved) {
     const data = JSON.parse(saved);
+    deviceName = normalizeDeviceName(data.deviceName || 'RGB-Sequencer');
     ledCount = clamp(data.ledCount || 60, 1, MAX_LEDS);
     playlist = Array.isArray(data.playlist) && data.playlist.length ? data.playlist : defaultPlaylist();
     playlist.forEach(seq => seq.steps = (seq.steps || []).map(step => {
