@@ -255,8 +255,10 @@ function defaultPlaylist() {
 
 function ensureDemoSequenceInPlaylist(list) {
   if (!Array.isArray(list) || !list.length) return defaultPlaylist();
+  const existingDemo = list.find(seq => seq.name === 'Demo_Sequenz');
+  const demoEnabled = existingDemo ? existingDemo.enabled !== false : true;
   list = list.filter(seq => seq.name !== 'Demo_Sequenz');
-  list.unshift(defaultPlaylist()[0]);
+  list.unshift({ ...defaultPlaylist()[0], enabled: demoEnabled });
   return list;
 }
 
@@ -501,11 +503,16 @@ function changeLedCount() {
   render();
 }
 
-function updateSequenceMeta() {
+function syncCurrentSequenceMeta() {
   const seq = playlist[selectedSequence];
+  if (!seq) return;
   seq.name = seqName.value;
   seq.durationMs = secondsToMs(seqDuration.value, 10);
   seq.enabled = seqEnabled.checked;
+}
+
+function updateSequenceMeta() {
+  syncCurrentSequenceMeta();
   render();
 }
 
@@ -659,6 +666,7 @@ function stop(updateStatus = true) {
 }
 
 function saveLocal() {
+  syncCurrentSequenceMeta();
   localStorage.setItem('rgb-sim-playlist', JSON.stringify({ deviceName, apPassword, ledCount, playlist }));
   statusEl.textContent = 'Im Browser gespeichert';
 }

@@ -416,7 +416,11 @@ void addSequenceHeader(String line) {
 
   uint32_t duration = sep >= 0 ? line.substring(sep + 1, sep2 >= 0 ? sep2 : line.length()).toInt() : 10000;
   duration = constrain(duration, 100, 3600000);
-  bool enabled = sep2 < 0 || line.substring(sep2 + 1).toInt() != 0;
+  String enabledText = sep2 >= 0 ? line.substring(sep2 + 1) : "1";
+  int sep3 = enabledText.indexOf('|');
+  if (sep3 >= 0) enabledText = enabledText.substring(0, sep3);
+  enabledText.trim();
+  bool enabled = sep2 < 0 || enabledText != "0";
   sequences[sequenceCount++] = {name, duration, totalStepCount, 0, enabled};
 }
 
@@ -581,9 +585,9 @@ void savePlaylist(const String& text) {
   file.close();
 }
 
-String demoSequenceBlock() {
-  return String(
-    "#SEQ Demo_Sequenz|259000|1\n"
+String demoSequenceBlock(bool enabled = true) {
+  String block = String("#SEQ Demo_Sequenz|259000|") + (enabled ? "1\n" : "0\n");
+  block += String(
     "7000|FFFFFF:1|STEP:Weiss\n"
     "2000||STEP:Pause\n"
     "7000|FF0000:1|STEP:Rot\n"
@@ -642,11 +646,23 @@ String demoSequenceBlock() {
     "2000||STEP:Pause\n"
     "7000|FX:heartbeat:50:FFFFFF:1|STEP:Herzschlag\n"
   );
+  return block;
 }
 
 void ensureDemoSequence() {
+  bool demoEnabled = true;
   int demoStart = playlistText.indexOf("#SEQ Demo_Sequenz|");
   if (demoStart >= 0) {
+    int demoLineEnd = playlistText.indexOf('\n', demoStart);
+    if (demoLineEnd < 0) demoLineEnd = playlistText.length();
+    String demoHeader = playlistText.substring(demoStart, demoLineEnd);
+    int demoEnabledSep = demoHeader.lastIndexOf('|');
+    if (demoEnabledSep >= 0) {
+      String enabledText = demoHeader.substring(demoEnabledSep + 1);
+      enabledText.trim();
+      demoEnabled = enabledText != "0";
+    }
+
     int nextSequence = playlistText.indexOf("\n#SEQ ", demoStart + 1);
     if (nextSequence >= 0) {
       playlistText = playlistText.substring(0, demoStart) + playlistText.substring(nextSequence + 1);
@@ -654,7 +670,7 @@ void ensureDemoSequence() {
       playlistText = playlistText.substring(0, demoStart);
     }
   }
-  String demo = demoSequenceBlock();
+  String demo = demoSequenceBlock(demoEnabled);
   int firstSequence = playlistText.indexOf("#SEQ ");
   if (firstSequence >= 0) {
     playlistText = playlistText.substring(0, firstSequence) + demo + "\n" + playlistText.substring(firstSequence);
@@ -1250,11 +1266,16 @@ function changeLedCount() {
   liveCurrentStep();
 }
 
-function updateSequenceMeta() {
+function syncCurrentSequenceMeta() {
   const seq = playlist[selectedSequence];
+  if (!seq) return;
   seq.name = seqName.value;
   seq.durationMs = secondsToMs(seqDuration.value, 10);
   seq.enabled = seqEnabled.checked;
+}
+
+function updateSequenceMeta() {
+  syncCurrentSequenceMeta();
   render();
 }
 
@@ -1425,6 +1446,7 @@ function liveCurrentStep() {
 }
 
 function saveAll() {
+  syncCurrentSequenceMeta();
   apiFetch('/save', { method: 'POST', body: serialize() })
     .then(response => response.text())
     .then(text => { statusEl.textContent = text; liveCurrentStep(); })
