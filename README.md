@@ -101,6 +101,9 @@ Eigene Variante mit `Fade-In` und `Fade-Out`, ohne den Hauptsketch zu ersetzen:
 arduino/Wemos_D1_Mini_RGB_Sequencer_Fade/Wemos_D1_Mini_RGB_Sequencer_Fade.ino
 ```
 
+In dieser Variante dauern `Fade-In` und `Fade-Out` jeweils genau so lange wie die
+eingestellte Schrittdauer.
+
 Standard-Datenpin:
 
 ```cpp

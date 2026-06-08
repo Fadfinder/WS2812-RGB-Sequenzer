@@ -89,6 +89,8 @@ uint8_t currentSequence = 0;
 uint16_t currentStepOffset = 0;
 unsigned long lastStepAt = 0;
 unsigned long activeStepDurationMs = 0;
+unsigned long effectStepStartedAt = 0;
+unsigned long effectStepDurationMs = 5000;
 unsigned long sequenceStartedAt = 0;
 unsigned long liveUntil = 0;
 unsigned long lastEffectAt = 0;
@@ -140,6 +142,7 @@ unsigned long effectUpdateInterval(float setting) {
 }
 
 unsigned long effectUpdateIntervalForGroups(const String& groups) {
+  if (groups.indexOf("FX:fadeIn:") >= 0 || groups.indexOf("FX:fadeOut:") >= 0) return 20;
   unsigned long interval = 60000;
   int cursor = 0;
   while (cursor < groups.length()) {
@@ -315,12 +318,12 @@ uint32_t effectColorBase(const String& type, uint16_t led, float speed, uint32_t
     return scaleColor(chosenColor, beat / 255.0);
   }
   if (type == "fadeIn") {
-    uint16_t phase = t % 5000;
-    return scaleColor(chosenColor, phase / 4999.0);
+    float progress = (millis() - effectStepStartedAt) / (float)max(1UL, effectStepDurationMs);
+    return scaleColor(chosenColor, constrain(progress, 0.0, 1.0));
   }
   if (type == "fadeOut") {
-    uint16_t phase = t % 5000;
-    return scaleColor(chosenColor, 1.0 - phase / 4999.0);
+    float progress = (millis() - effectStepStartedAt) / (float)max(1UL, effectStepDurationMs);
+    return scaleColor(chosenColor, 1.0 - constrain(progress, 0.0, 1.0));
   }
   return 0;
 }
@@ -491,10 +494,12 @@ unsigned long chooseStepDuration(const Step& step) {
 }
 
 void startStep(Step& step) {
-  applyStepGroups(step.groups);
   activeStepDurationMs = chooseStepDuration(step);
-  lastEffectAt = millis();
-  lastStepAt = millis();
+  effectStepDurationMs = max(20UL, activeStepDurationMs);
+  effectStepStartedAt = millis();
+  lastEffectAt = effectStepStartedAt;
+  lastStepAt = effectStepStartedAt;
+  applyStepGroups(step.groups);
 }
 
 void startCurrentSequence() {
@@ -1435,7 +1440,7 @@ function liveCurrentStep() {
     const groups = groupsFromMap(paintedColors).map(group => `${group.color.replace('#', '').toUpperCase()}:${group.leds || ''}`).join(';');
     const effects = currentEffects.map(effect => `FX:${effect.type}:${clamp(Number(effect.speed ?? 50), 0, 100)}:${String(effect.color || '#ffffff').replace('#', '').toUpperCase()}:${clamp(Number(effect.brightness ?? 1), 0, 1)}:${effect.leds || ''}`).join(';');
     const allGroups = [groups, effects].filter(Boolean).join(';');
-    const params = new URLSearchParams({ groups: allGroups });
+    const params = new URLSearchParams({ groups: allGroups, durationMs: String(secondsToMs(stepSeconds.value, 1)) });
     apiFetch(`/live?${params}`).catch(() => { statusEl.textContent = 'Keine Verbindung zum Wemos'; });
   }, 80);
 }
@@ -1563,8 +1568,10 @@ void handleLive() {
   String groups = server.arg("groups");
   liveGroups = groups;
   liveUntil = playbackRunning ? millis() + 3000 : 0;
+  effectStepDurationMs = constrain(server.arg("durationMs").toInt(), 20, 60000);
+  effectStepStartedAt = millis();
   applyStepGroups(groups);
-  lastEffectAt = millis();
+  lastEffectAt = effectStepStartedAt;
   addDefaultHeaders();
   server.send(200, "text/plain", "OK");
 }
