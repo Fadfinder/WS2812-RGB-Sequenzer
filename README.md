@@ -95,6 +95,12 @@ Sketch:
 arduino/Wemos_D1_Mini_RGB_Sequencer/Wemos_D1_Mini_RGB_Sequencer.ino
 ```
 
+Eigene Variante mit `Fade-In` und `Fade-Out`, ohne den Hauptsketch zu ersetzen:
+
+```text
+arduino/Wemos_D1_Mini_RGB_Sequencer_Fade/Wemos_D1_Mini_RGB_Sequencer_Fade.ino
+```
+
 Standard-Datenpin:
 
 ```cpp
