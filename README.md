@@ -122,6 +122,12 @@ Die Schritthelligkeit wirkt als Faktor und ueberschreibt die Einzelwerte nicht.
 Beispiel: 60 Prozent LED-Helligkeit bei 50 Prozent Schritthelligkeit ergeben
 effektiv 30 Prozent.
 
+Die erweiterte Variante bietet ausserdem benannte LED-Gruppen. Ein Gruppenname kann
+anstelle einer LED-Liste bei Effekten verwendet werden. Sequenzen koennen ihre Dauer
+wahlweise automatisch aus der Summe ihrer Schritte berechnen. Aenderungen am aktuell
+bearbeiteten Schritt werden beim Wechsel zu einem anderen Schritt automatisch
+uebernommen; `Speichern` schreibt das gesamte Projekt dauerhaft in den Wemos-Flash.
+
 Standard-Datenpin:
 
 ```cpp

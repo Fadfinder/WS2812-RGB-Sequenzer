@@ -77,13 +77,22 @@ struct Sequence {
   uint16_t firstStep;
   uint16_t stepCount;
   bool enabled;
+  bool autoDuration;
+};
+
+struct LedGroup {
+  String name;
+  String leds;
 };
 
 const uint8_t MAX_SEQUENCES = 30;
 const uint16_t MAX_STEPS = 240;
+const uint8_t MAX_LED_GROUPS = 20;
 
 Sequence sequences[MAX_SEQUENCES];
 Step steps[MAX_STEPS];
+LedGroup ledGroups[MAX_LED_GROUPS];
+uint8_t ledGroupCount = 0;
 uint8_t sequenceCount = 0;
 uint16_t totalStepCount = 0;
 uint8_t currentSequence = 0;
@@ -184,9 +193,34 @@ void clearStrip() {
   showStrip();
 }
 
+String resolveLedSelection(String selection) {
+  selection.trim();
+  String resolved = "";
+  int cursor = 0;
+  while (cursor < selection.length()) {
+    int comma = selection.indexOf(',', cursor);
+    if (comma < 0) comma = selection.length();
+    String part = selection.substring(cursor, comma);
+    part.trim();
+    String replacement = part;
+    for (uint8_t i = 0; i < ledGroupCount; i++) {
+      if (part.equalsIgnoreCase(ledGroups[i].name)) {
+        replacement = ledGroups[i].leds;
+        break;
+      }
+    }
+    if (replacement.length() > 0) {
+      if (resolved.length() > 0) resolved += ",";
+      resolved += replacement;
+    }
+    cursor = comma + 1;
+  }
+  return resolved;
+}
+
 void applyLedSelection(const String& selection, uint32_t color, float brightness = 1.0) {
   color = scaleColor(color, brightness);
-  String text = selection;
+  String text = resolveLedSelection(selection);
   text.replace(" ", "");
   text.toUpperCase();
 
@@ -365,7 +399,7 @@ uint32_t effectColor(const String& type, uint16_t led, float speed, float speedS
 }
 
 void applyEffectSelection(const String& selection, const String& type, float speed, float speedSetting, uint32_t chosenColor, float brightness) {
-  String text = selection;
+  String text = resolveLedSelection(selection);
   text.replace(" ", "");
   text.toUpperCase();
 
@@ -467,23 +501,39 @@ void addSequenceHeader(String line) {
 
   int sep = line.indexOf('|');
   int sep2 = sep >= 0 ? line.indexOf('|', sep + 1) : -1;
+  int sep3 = sep2 >= 0 ? line.indexOf('|', sep2 + 1) : -1;
   String name = sep >= 0 ? line.substring(0, sep) : line;
   name.trim();
   if (name.length() == 0) name = "Sequenz " + String(sequenceCount + 1);
 
   uint32_t duration = sep >= 0 ? line.substring(sep + 1, sep2 >= 0 ? sep2 : line.length()).toInt() : 10000;
   duration = constrain(duration, 100, 3600000);
-  String enabledText = sep2 >= 0 ? line.substring(sep2 + 1) : "1";
-  int sep3 = enabledText.indexOf('|');
-  if (sep3 >= 0) enabledText = enabledText.substring(0, sep3);
+  String enabledText = sep2 >= 0 ? line.substring(sep2 + 1, sep3 >= 0 ? sep3 : line.length()) : "1";
   enabledText.trim();
   bool enabled = sep2 < 0 || enabledText != "0";
-  sequences[sequenceCount++] = {name, duration, totalStepCount, 0, enabled};
+  String autoText = sep3 >= 0 ? line.substring(sep3 + 1) : "0";
+  autoText.trim();
+  bool autoDuration = autoText == "1";
+  sequences[sequenceCount++] = {name, duration, totalStepCount, 0, enabled, autoDuration};
+}
+
+void addLedGroup(String line) {
+  if (ledGroupCount >= MAX_LED_GROUPS) return;
+  line.replace("#GROUP", "");
+  line.trim();
+  int sep = line.indexOf('|');
+  if (sep <= 0) return;
+  String name = line.substring(0, sep);
+  String leds = line.substring(sep + 1);
+  name.trim();
+  leds.trim();
+  if (name.length() == 0 || leds.length() == 0) return;
+  ledGroups[ledGroupCount++] = {name.substring(0, 24), leds};
 }
 
 void ensureSequenceExists() {
   if (sequenceCount > 0 || sequenceCount >= MAX_SEQUENCES) return;
-  sequences[0] = {"Sequenz 1", 10000, totalStepCount, 0, true};
+  sequences[0] = {"Sequenz 1", 10000, totalStepCount, 0, true, false};
   sequenceCount = 1;
 }
 
@@ -594,6 +644,7 @@ String normalizePassword(String password) {
 void parsePlaylist(const String& text) {
   sequenceCount = 0;
   totalStepCount = 0;
+  ledGroupCount = 0;
   deviceName = DEFAULT_DEVICE_NAME;
   apPassword = DEFAULT_AP_PASSWORD;
 
@@ -618,6 +669,8 @@ void parsePlaylist(const String& text) {
       countText.replace("#COUNT", "");
       countText.trim();
       applyLedCount(countText.toInt());
+    } else if (line.startsWith("#GROUP")) {
+      addLedGroup(line);
     } else if (line.startsWith("#SEQ")) {
       addSequenceHeader(line);
     } else if (line.length() > 0 && !line.startsWith("#")) {
@@ -631,8 +684,18 @@ void parsePlaylist(const String& text) {
     sequenceCount--;
   }
 
+  for (uint8_t i = 0; i < sequenceCount; i++) {
+    if (!sequences[i].autoDuration) continue;
+    uint32_t sum = 0;
+    for (uint16_t stepIndex = 0; stepIndex < sequences[i].stepCount; stepIndex++) {
+      const Step& step = steps[sequences[i].firstStep + stepIndex];
+      sum += step.randomMaxMs > 0 ? step.randomMaxMs : step.durationMs;
+    }
+    sequences[i].durationMs = constrain(sum, 100UL, 3600000UL);
+  }
+
   if (sequenceCount == 0 || totalStepCount == 0) {
-    sequences[0] = {"Aus", 1000, 0, 1, true};
+    sequences[0] = {"Aus", 1000, 0, 1, true, false};
     steps[0] = {1000, 0, 100, ""};
     sequenceCount = 1;
     totalStepCount = 1;
@@ -649,7 +712,7 @@ void savePlaylist(const String& text) {
 }
 
 String demoSequenceBlock(bool enabled = true) {
-  String block = String("#SEQ Demo_Sequenz|304000|") + (enabled ? "1\n" : "0\n");
+  String block = String("#SEQ Demo_Sequenz|304000|") + (enabled ? "1|0\n" : "0|0\n");
   block += String(
     "7000|FFFFFF:1|STEP:Weiss\n"
     "2000||STEP:Pause\n"
@@ -729,9 +792,11 @@ void ensureDemoSequence() {
     int demoLineEnd = playlistText.indexOf('\n', demoStart);
     if (demoLineEnd < 0) demoLineEnd = playlistText.length();
     String demoHeader = playlistText.substring(demoStart, demoLineEnd);
-    int demoEnabledSep = demoHeader.lastIndexOf('|');
+    int firstSep = demoHeader.indexOf('|');
+    int demoEnabledSep = firstSep >= 0 ? demoHeader.indexOf('|', firstSep + 1) : -1;
     if (demoEnabledSep >= 0) {
-      String enabledText = demoHeader.substring(demoEnabledSep + 1);
+      int enabledEnd = demoHeader.indexOf('|', demoEnabledSep + 1);
+      String enabledText = demoHeader.substring(demoEnabledSep + 1, enabledEnd >= 0 ? enabledEnd : demoHeader.length());
       enabledText.trim();
       demoEnabled = enabledText != "0";
     }
@@ -777,7 +842,7 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
     :root { font-family: system-ui, sans-serif; color: #172033; background: #eef2f7; }
     * { box-sizing: border-box; }
     body { margin: 0; background: #eef2f7; color: #172033; }
-    main { display: grid; grid-template-columns: 380px 1fr; min-height: 100vh; }
+    main { display: grid; grid-template-columns: 420px 1fr; min-height: 100vh; }
     aside, section { padding: 18px; }
     aside { background: #182235; color: #f8fafc; }
     h1 { font-size: 22px; margin: 0 0 18px; }
@@ -800,6 +865,9 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
     .sidebar-row button { flex: 1 1 0; padding-left: 8px; padding-right: 8px; }
     .sidebar-panel { margin-bottom: 18px; }
     .sidebar-panel label { display: block; margin-bottom: 8px; }
+    .check-row { display: flex !important; align-items: center; gap: 8px; }
+    .check-row input { width: 22px; min-height: 22px; }
+    .compact-actions { margin: 10px 0 14px; }
     .panel { background: #fff; border: 1px solid #d7dee8; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
     .led-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 8px; max-height: 45vh; overflow: auto; padding: 2px; -webkit-overflow-scrolling: touch; }
     .led-btn { min-height: 48px; border: 2px solid #cbd5e1; background: #f8fafc; }
@@ -808,6 +876,9 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
     .step { display: grid; grid-template-columns: 1fr auto repeat(5, auto); gap: 8px; align-items: center; padding: 10px; background: #f8fafc; border: 1px solid #d7dee8; border-radius: 8px; }
     .step.active { outline: 3px solid #38bdf8; }
     .effects { display: grid; gap: 8px; }
+    .group-list { display: grid; gap: 6px; margin: 10px 0 18px; }
+    .group-item { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 8px 10px; background: #f8fafc; border: 1px solid #d7dee8; border-radius: 8px; }
+    .step-toolbar { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #d7dee8; }
     .effect { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 9px; background: #f8fafc; border: 1px solid #d7dee8; border-radius: 8px; }
     .status { min-height: 24px; color: #166534; font-weight: 800; }
     .muted { color: #64748b; font-size: 14px; }
@@ -834,102 +905,67 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
 <main>
   <aside>
     <h1>RGB Sequencer</h1>
-
     <div class="sidebar-panel">
-      <h3>1. Geraet und LEDs</h3>
-      <label>Name / WLAN
-        <input id="deviceNameInput" maxlength="31" value="RGB-Sequencer" />
-      </label>
+      <h3>Geraet</h3>
+      <label>Name / WLAN<input id="deviceNameInput" maxlength="31" value="RGB-Sequencer" /></label>
       <button class="ghost" onclick="applyDeviceName()">Name uebernehmen</button>
-      <label>Kennwort
-        <input id="apPasswordInput" type="text" minlength="8" maxlength="63" value="12345678" />
-      </label>
-      <label>Kennwort wiederholen
-        <input id="apPasswordConfirmInput" type="text" minlength="8" maxlength="63" value="12345678" />
-      </label>
+      <label>Kennwort<input id="apPasswordInput" type="text" minlength="8" maxlength="63" value="12345678" /></label>
+      <label>Kennwort wiederholen<input id="apPasswordConfirmInput" type="text" minlength="8" maxlength="63" value="12345678" /></label>
       <button class="ghost" onclick="applyPassword()">Kennwort uebernehmen</button>
-      <label>Anzahl LEDs
-        <input id="ledCountInput" type="number" min="1" max="50" value="50" onchange="changeLedCount()" />
-      </label>
-      <div class="sidebar-row">
-        <button class="ghost" onclick="paintAll()">Alle setzen</button>
-        <button class="ghost" onclick="clearPaint()">Alle aus</button>
-      </div>
     </div>
 
-    <div class="seq-list" id="sequenceList"></div>
-    <h3>2. Sequenzen</h3>
-    <div class="sidebar-row">
-      <button class="ghost" onclick="addSequence()">Neu</button>
-      <button class="ghost" onclick="moveSequence(-1)">Hoch</button>
-      <button class="ghost" onclick="moveSequence(1)">Runter</button>
-      <button class="danger" onclick="deleteSequence()">Loeschen</button>
+    <div class="sidebar-panel">
+      <h3>Sequenzen</h3>
+      <div class="seq-list" id="sequenceList"></div>
+      <div class="sidebar-row compact-actions">
+        <button class="ghost" onclick="addSequence()">Neu</button>
+        <button class="ghost" onclick="moveSequence(-1)">Hoch</button>
+        <button class="ghost" onclick="moveSequence(1)">Runter</button>
+        <button class="danger" onclick="deleteSequence()">Loeschen</button>
+      </div>
+      <label>Sequenzname<input id="seqName" oninput="updateSequenceMeta()" /></label>
+      <label class="check-row"><input id="seqEnabled" type="checkbox" onchange="updateSequenceMeta()" /> Aktiv</label>
+      <label class="check-row"><input id="seqAutoDuration" type="checkbox" onchange="updateSequenceMeta()" /> Dauer aus Schritten berechnen</label>
+      <label>Dauer Sekunden<input id="seqDuration" type="number" min="0.1" step="0.1" oninput="updateSequenceMeta()" /></label>
+      <div id="seqDurationInfo" class="seq-meta"></div>
     </div>
   </aside>
 
   <section>
     <div class="panel">
-      <h2>3. Steuerung</h2>
       <div class="row">
         <button class="primary" onclick="playPlaylist()">Abspielen</button>
         <button onclick="stopPlaylist()">Stop</button>
-        <button class="primary" onclick="saveAll()">Alle Sequenzen speichern</button>
+        <button class="primary" onclick="saveAll()">Speichern</button>
       </div>
       <p id="status" class="status"></p>
-      <p class="muted">Ohne Abspielen wird der aktuell bearbeitete Schritt live auf den LEDs angezeigt.</p>
     </div>
 
     <div class="panel">
-      <h2>4. Sequenz bearbeiten</h2>
+      <h2>LEDs, Farben und Gruppen</h2>
       <div class="row">
-        <label style="flex: 1 1 260px">Name
-          <input id="seqName" oninput="updateSequenceMeta()" />
-        </label>
-        <label style="width: 170px">Dauer Sequenz
-          <input id="seqDuration" type="number" min="0.1" step="0.1" oninput="updateSequenceMeta()" />
-        </label>
-        <label style="width: 130px">Aktiv
-          <input id="seqEnabled" type="checkbox" onchange="updateSequenceMeta()" />
-        </label>
-      </div>
-    </div>
-
-    <div class="panel">
-      <h2>5. Aktuellen Schritt bearbeiten</h2>
-      <div class="row">
-        <label style="flex: 1 1 220px">Schrittname
-          <input id="stepName" oninput="liveCurrentStep()" />
-        </label>
-        <label style="width: 170px">Schrittdauer Sekunden
-          <input id="stepSeconds" type="number" min="0.02" step="0.1" value="1" oninput="liveCurrentStep()" />
-        </label>
-        <label style="width: 210px">Zufallsdauer bis Sekunden
-          <input id="stepRandomSeconds" type="number" min="0" max="60" step="0.1" value="0" oninput="liveCurrentStep()" />
-        </label>
-        <label style="width: 170px">Gesamthelligkeit %
-          <input id="stepBrightness" type="number" min="0" max="100" step="1" value="100" oninput="liveCurrentStep()" />
-        </label>
-        <button class="primary" onclick="saveStep()">Schritt speichern</button>
-        <button onclick="newStep()">Neuer Schritt</button>
-        <button onclick="pasteStep()">Kopierten Schritt einfuegen</button>
-      </div>
-      <h3>LEDs fuer diesen Schritt</h3>
-      <div class="row" style="margin-bottom: 12px">
-        <label style="width: 120px">Farbe
-          <input id="stepColor" type="color" value="#ff0000" oninput="liveCurrentStep()" />
-        </label>
-        <label style="width: 150px">Helligkeit %
-          <input id="ledBrightness" type="number" min="0" max="100" step="1" value="100" />
-        </label>
+        <label style="width: 150px">Anzahl LEDs<input id="ledCountInput" type="number" min="1" max="50" value="50" onchange="changeLedCount()" /></label>
+        <label style="width: 150px">Farbe<input id="stepColor" type="color" value="#ff0000" oninput="liveCurrentStep()" /></label>
+        <label style="width: 150px">Helligkeit %<input id="ledBrightness" type="number" min="0" max="100" step="1" value="100" /></label>
+        <button onclick="paintAll()">Alle setzen</button>
+        <button onclick="clearPaint()">Alle aus</button>
       </div>
       <div class="led-grid" id="ledGrid"></div>
-    </div>
 
-    <div class="panel">
-      <h2>6. Effekte im aktuellen Schritt</h2>
+      <h3>Benannte LED-Gruppen</h3>
       <div class="row">
-        <label style="width: 180px">LEDs
-          <input id="effectLeds" value="1-20" />
+        <label style="flex: 1 1 180px">Gruppenname<input id="ledGroupName" maxlength="24" placeholder="z. B. Fenster" /></label>
+        <label style="flex: 1 1 220px">LEDs<input id="ledGroupSelection" placeholder="z. B. 1-4,8" /></label>
+        <button onclick="useCurrentLedsForGroup()">Aktuelle LEDs</button>
+        <button onclick="saveLedGroup()">Gruppe speichern</button>
+      </div>
+      <div id="ledGroupList" class="group-list"></div>
+
+      <h3>Effekte im aktuellen Schritt</h3>
+      <div class="row">
+        <label style="width: 220px">LEDs oder Gruppenname
+          <input id="effectLeds" value="1-20" list="ledGroupNames" />
+          <datalist id="ledGroupNames"></datalist>
         </label>
         <label style="width: 180px">Effekt
           <select id="effectType">
@@ -980,7 +1016,16 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
     </div>
 
     <div class="panel">
-      <h2>7. Schritte dieser Sequenz</h2>
+      <h2>Schritte dieser Sequenz</h2>
+      <div class="row step-toolbar">
+        <label style="flex: 1 1 200px">Schrittname<input id="stepName" oninput="liveCurrentStep()" /></label>
+        <label style="width: 160px">Dauer Sekunden<input id="stepSeconds" type="number" min="0.02" step="0.1" value="1" oninput="liveCurrentStep()" /></label>
+        <label style="width: 190px">Zufallsdauer bis<input id="stepRandomSeconds" type="number" min="0" max="60" step="0.1" value="0" oninput="liveCurrentStep()" /></label>
+        <label style="width: 170px">Gesamthelligkeit %<input id="stepBrightness" type="number" min="0" max="100" step="1" value="100" oninput="liveCurrentStep()" /></label>
+        <button class="primary" onclick="saveStep()">Schritt speichern</button>
+        <button onclick="newStep()">Neuer Schritt</button>
+        <button onclick="pasteStep()">Einfuegen</button>
+      </div>
       <div class="steps" id="steps"></div>
     </div>
   </section>
@@ -991,6 +1036,7 @@ const MAX_LEDS = 50;
 let deviceName = 'RGB-Sequencer';
 let ledCount = 50;
 let playlist = [];
+let ledGroups = [];
 let selectedSequence = 0;
 let selectedStep = -1;
 let paintedColors = new Map();
@@ -1012,6 +1058,8 @@ const effectsEl = document.getElementById('effects');
 const seqName = document.getElementById('seqName');
 const seqDuration = document.getElementById('seqDuration');
 const seqEnabled = document.getElementById('seqEnabled');
+const seqAutoDuration = document.getElementById('seqAutoDuration');
+const seqDurationInfo = document.getElementById('seqDurationInfo');
 const stepName = document.getElementById('stepName');
 const stepSeconds = document.getElementById('stepSeconds');
 const stepRandomSeconds = document.getElementById('stepRandomSeconds');
@@ -1028,13 +1076,17 @@ const deviceNameInput = document.getElementById('deviceNameInput');
 const apPasswordInput = document.getElementById('apPasswordInput');
 const apPasswordConfirmInput = document.getElementById('apPasswordConfirmInput');
 const ledCountInput = document.getElementById('ledCountInput');
+const ledGroupName = document.getElementById('ledGroupName');
+const ledGroupSelection = document.getElementById('ledGroupSelection');
+const ledGroupList = document.getElementById('ledGroupList');
+const ledGroupNames = document.getElementById('ledGroupNames');
 let apPassword = '12345678';
 
 const EFFECT_TYPES = ['fire', 'storm', 'rainbow', 'welder', 'camera', 'police', 'sparkle', 'comet', 'theater', 'pulse', 'breathe', 'lava', 'randomOnOff', 'randomColor', 'randomOnOffColor', 'meteor', 'twinkle', 'candle', 'sunrise', 'sunset', 'scanner', 'confetti', 'aurora', 'toxic', 'heartbeat', 'fadeIn', 'fadeOut', 'transition', 'blink', 'running'];
 
 function defaultPlaylist() {
   return [
-    { name: 'Demo_Sequenz', durationMs: 304000, enabled: true, steps: [
+    { name: 'Demo_Sequenz', durationMs: 304000, enabled: true, autoDuration: false, steps: [
       { name: 'Weiss', durationMs: 7000, randomMaxMs: 0, groups: [{ leds: '1', color: '#ffffff' }], effects: [] },
       { name: 'Pause', durationMs: 2000, randomMaxMs: 0, groups: [], effects: [] },
       { name: 'Rot', durationMs: 7000, randomMaxMs: 0, groups: [{ leds: '1', color: '#ff0000' }], effects: [] },
@@ -1141,6 +1193,7 @@ function groupsFromMap(colors) {
 function parseStored(text) {
   const list = [];
   let current = null;
+  ledGroups = [];
   deviceName = 'RGB-Sequencer';
   apPassword = '12345678';
   for (const raw of text.split('\n')) {
@@ -1158,6 +1211,13 @@ function parseStored(text) {
       ledCount = clamp(parseInt(line.replace('#COUNT', '').trim(), 10) || 50, 1, MAX_LEDS);
       continue;
     }
+    if (line.startsWith('#GROUP')) {
+      const groupParts = line.replace('#GROUP', '').trim().split('|');
+      const name = String(groupParts[0] || '').trim().slice(0, 24);
+      const leds = String(groupParts.slice(1).join('|') || '').trim();
+      if (name && leds) ledGroups.push({ name, leds });
+      continue;
+    }
     if (line.startsWith('#SEQ')) {
       const header = line.replace('#SEQ', '').trim();
       const fields = header.split('|');
@@ -1165,6 +1225,7 @@ function parseStored(text) {
         name: fields[0]?.trim() || 'Sequenz',
         durationMs: parseInt(fields[1], 10) || 10000,
         enabled: fields.length < 3 || fields[2] !== '0',
+        autoDuration: fields.length >= 4 && fields[3] === '1',
         steps: []
       };
       list.push(current);
@@ -1206,7 +1267,8 @@ function parseStored(text) {
 
 function serialize() {
   const body = playlist.map(seq => {
-    const header = `#SEQ ${seq.name || 'Sequenz'}|${Math.max(100, Math.round(seq.durationMs || 10000))}|${seq.enabled === false ? 0 : 1}`;
+    const duration = seq.autoDuration ? sequenceStepDuration(seq) : Math.max(100, Math.round(seq.durationMs || 10000));
+    const header = `#SEQ ${seq.name || 'Sequenz'}|${duration}|${seq.enabled === false ? 0 : 1}|${seq.autoDuration ? 1 : 0}`;
     const lines = seq.steps.map(step => {
       step = normalizeStep(step);
       const colorGroups = step.groups.map(group => `${group.color.replace('#', '').toUpperCase()}@${clamp(Number(group.brightness ?? 1), 0, 1)}:${group.leds || ''}`);
@@ -1219,7 +1281,12 @@ function serialize() {
     });
     return [header, ...lines].join('\n');
   }).join('\n\n');
-  return `#NAME ${normalizeDeviceName(deviceName)}\n#PASS ${normalizePassword(apPassword)}\n#COUNT ${ledCount}\n${body}`;
+  const groupLines = ledGroups.map(group => `#GROUP ${group.name}|${group.leds}`).join('\n');
+  return `#NAME ${normalizeDeviceName(deviceName)}\n#PASS ${normalizePassword(apPassword)}\n#COUNT ${ledCount}\n${groupLines}${groupLines ? '\n' : ''}${body}`;
+}
+
+function sequenceStepDuration(seq) {
+  return Math.max(100, (seq.steps || []).reduce((sum, step) => sum + (Number(step.randomMaxMs) > 0 ? Number(step.randomMaxMs) : Number(step.durationMs || 0)), 0));
 }
 
 function render() {
@@ -1238,13 +1305,19 @@ function render() {
     el.className = `seq-item ${index === selectedSequence ? 'active' : ''}`;
     el.onclick = () => selectSequence(index);
     const state = item.enabled === false ? 'inaktiv' : 'aktiv';
-    el.innerHTML = `<div><strong>${escapeHtml(item.name || 'Sequenz')}</strong><div class="seq-meta">${state}, ${msToSeconds(item.durationMs)} s, ${item.steps.length} Schritte</div></div><div>${index + 1}</div>`;
+    const duration = item.autoDuration ? sequenceStepDuration(item) : item.durationMs;
+    el.innerHTML = `<div><strong>${escapeHtml(item.name || 'Sequenz')}</strong><div class="seq-meta">${state}, ${msToSeconds(duration)} s, ${item.steps.length} Schritte</div></div><div>${index + 1}</div>`;
     sequenceList.appendChild(el);
   });
 
   seqName.value = seq.name || '';
-  seqDuration.value = msToSeconds(seq.durationMs);
+  const calculatedDuration = sequenceStepDuration(seq);
+  seqDuration.value = msToSeconds(seq.autoDuration ? calculatedDuration : seq.durationMs);
   seqEnabled.checked = seq.enabled !== false;
+  seqAutoDuration.checked = seq.autoDuration === true;
+  seqDuration.disabled = seq.autoDuration === true;
+  seqDurationInfo.textContent = seq.autoDuration ? `Summe der Schritte: ${msToSeconds(calculatedDuration)} s` : '';
+  renderLedGroups();
   renderLedGrid();
   renderStrip();
   renderEffects();
@@ -1352,6 +1425,7 @@ function renderEffects() {
 }
 
 function selectSequence(index) {
+  saveCurrentStepDraft();
   selectedSequence = index;
   selectedStep = -1;
   paintedColors.clear();
@@ -1363,7 +1437,7 @@ function selectSequence(index) {
 function changeLedCount() {
   ledCount = clamp(parseInt(ledCountInput.value, 10) || 50, 1, MAX_LEDS);
   paintedColors = new Map([...paintedColors].filter(([led]) => led <= ledCount));
-  currentEffects = currentEffects.map(effect => ({ ...effect, leds: compactNumbers([...expandSelection(effect.leds)].filter(led => led <= ledCount)) }));
+  currentEffects = currentEffects.map(effect => ledGroups.some(group => group.name.toLowerCase() === String(effect.leds).toLowerCase()) ? effect : ({ ...effect, leds: compactNumbers([...expandSelection(effect.leds)].filter(led => led <= ledCount)) }));
   render();
   liveCurrentStep();
 }
@@ -1372,13 +1446,65 @@ function syncCurrentSequenceMeta() {
   const seq = playlist[selectedSequence];
   if (!seq) return;
   seq.name = seqName.value;
-  seq.durationMs = secondsToMs(seqDuration.value, 10);
+  seq.autoDuration = seqAutoDuration.checked;
+  seq.durationMs = seq.autoDuration ? sequenceStepDuration(seq) : secondsToMs(seqDuration.value, 10);
   seq.enabled = seqEnabled.checked;
 }
 
 function updateSequenceMeta() {
   syncCurrentSequenceMeta();
   render();
+}
+
+function renderLedGroups() {
+  ledGroupList.innerHTML = '';
+  ledGroupNames.innerHTML = '';
+  ledGroups.forEach((group, index) => {
+    const option = document.createElement('option');
+    option.value = group.name;
+    ledGroupNames.appendChild(option);
+    const row = document.createElement('div');
+    row.className = 'group-item';
+    row.innerHTML = `<div><strong>${escapeHtml(group.name)}</strong><div class="muted">LEDs ${escapeHtml(group.leds)}</div></div><button onclick="applyLedGroup(${index})">Waehlen</button><button class="danger" onclick="deleteLedGroup(${index})">X</button>`;
+    ledGroupList.appendChild(row);
+  });
+  if (!ledGroups.length) ledGroupList.innerHTML = '<div class="muted">Noch keine LED-Gruppe gespeichert.</div>';
+}
+
+function useCurrentLedsForGroup() {
+  ledGroupSelection.value = compactNumbers([...paintedColors.keys()]);
+}
+
+function saveLedGroup() {
+  const name = ledGroupName.value.trim().slice(0, 24);
+  const leds = compactNumbers([...expandNumericSelection(ledGroupSelection.value)]);
+  if (!name || !leds) {
+    statusEl.textContent = 'Gruppenname und LEDs angeben.';
+    return;
+  }
+  const existing = ledGroups.findIndex(group => group.name.toLowerCase() === name.toLowerCase());
+  const value = { name, leds };
+  if (existing >= 0) ledGroups[existing] = value;
+  else ledGroups.push(value);
+  ledGroupName.value = '';
+  ledGroupSelection.value = '';
+  renderLedGroups();
+  statusEl.textContent = 'LED-Gruppe gespeichert. Zum dauerhaften Speichern alle Sequenzen speichern.';
+}
+
+function applyLedGroup(index) {
+  const group = ledGroups[index];
+  if (!group) return;
+  const color = stepColor.value.toLowerCase();
+  const brightness = clamp(readNumber(ledBrightness.value, 100) / 100, 0, 1);
+  for (const led of expandNumericSelection(group.leds)) paintedColors.set(led, { color, brightness });
+  renderLedGrid();
+  liveCurrentStep();
+}
+
+function deleteLedGroup(index) {
+  ledGroups.splice(index, 1);
+  renderLedGroups();
 }
 
 function toggleLed(index) {
@@ -1409,6 +1535,7 @@ function clearPaint() {
 }
 
 function newStep() {
+  saveCurrentStepDraft();
   const seq = playlist[selectedSequence];
   const insertAt = selectedStep >= 0 ? selectedStep + 1 : seq.steps.length;
   seq.steps.splice(insertAt, 0, { durationMs: 1000, randomMaxMs: 0, brightness: 100, groups: [], effects: [] });
@@ -1417,17 +1544,24 @@ function newStep() {
 }
 
 function saveStep() {
-  const seq = playlist[selectedSequence];
-  const step = { name: stepName.value.trim(), durationMs: secondsToMs(stepSeconds.value, 1), randomMaxMs: secondsToOptionalMs(stepRandomSeconds.value), brightness: clamp(readNumber(stepBrightness.value, 100), 0, 100), groups: groupsFromMap(paintedColors), effects: currentEffects.map(effect => ({ ...effect })) };
-  if (selectedStep >= 0) seq.steps[selectedStep] = step;
-  else {
-    seq.steps.push(step);
-    selectedStep = seq.steps.length - 1;
-  }
+  saveCurrentStepDraft(true);
   render();
 }
 
+function saveCurrentStepDraft(createIfMissing = false) {
+  const seq = playlist[selectedSequence];
+  if (!seq) return;
+  const step = { name: stepName.value.trim(), durationMs: secondsToMs(stepSeconds.value, 1), randomMaxMs: secondsToOptionalMs(stepRandomSeconds.value), brightness: clamp(readNumber(stepBrightness.value, 100), 0, 100), groups: groupsFromMap(paintedColors), effects: currentEffects.map(effect => ({ ...effect })) };
+  if (selectedStep >= 0) seq.steps[selectedStep] = step;
+  else if (createIfMissing) {
+    seq.steps.push(step);
+    selectedStep = seq.steps.length - 1;
+  }
+  if (seq.autoDuration) seq.durationMs = sequenceStepDuration(seq);
+}
+
 function loadStep(index) {
+  if (index !== selectedStep) saveCurrentStepDraft();
   const step = normalizeStep(playlist[selectedSequence].steps[index]);
   selectedStep = index;
   paintedColors = mapFromGroups(step.groups);
@@ -1443,7 +1577,9 @@ function loadStep(index) {
 }
 
 function addEffect() {
-  const leds = compactNumbers([...expandSelection(effectLeds.value)]);
+  const requested = effectLeds.value.trim();
+  const namedGroup = ledGroups.find(group => group.name.toLowerCase() === requested.toLowerCase());
+  const leds = namedGroup ? namedGroup.name : compactNumbers([...expandSelection(requested)]);
   if (!leds) return;
   currentEffects.push({ leds, type: effectType.value, speed: clamp(readNumber(effectSpeed.value, 50), 0, 100), brightness: clamp(readNumber(effectBrightness.value, 100) / 100, 0, 1), color: effectColor.value });
   render();
@@ -1480,12 +1616,14 @@ function deleteEffect(index) {
 }
 
 function deleteStep(index) {
+  if (index !== selectedStep) saveCurrentStepDraft();
   playlist[selectedSequence].steps.splice(index, 1);
   selectedStep = -1;
   render();
 }
 
 function moveStep(index, direction) {
+  saveCurrentStepDraft();
   const steps = playlist[selectedSequence].steps;
   const target = index + direction;
   if (target < 0 || target >= steps.length) return;
@@ -1504,6 +1642,7 @@ function copyStep(index) {
 }
 
 function pasteStep(afterIndex = selectedStep) {
+  saveCurrentStepDraft();
   if (!copiedStep) return;
   const steps = playlist[selectedSequence].steps;
   const insertAt = afterIndex >= 0 ? afterIndex + 1 : steps.length;
@@ -1514,7 +1653,8 @@ function pasteStep(afterIndex = selectedStep) {
 }
 
 function addSequence() {
-  playlist.splice(selectedSequence + 1, 0, { name: 'Neue Sequenz', durationMs: 10000, enabled: true, steps: [] });
+  saveCurrentStepDraft();
+  playlist.splice(selectedSequence + 1, 0, { name: 'Neue Sequenz', durationMs: 10000, enabled: true, autoDuration: true, steps: [] });
   selectedSequence += 1;
   selectedStep = -1;
   paintedColors.clear();
@@ -1523,6 +1663,7 @@ function addSequence() {
 }
 
 function deleteSequence() {
+  saveCurrentStepDraft();
   if (playlist.length <= 1) return;
   playlist.splice(selectedSequence, 1);
   selectedSequence = Math.max(0, selectedSequence - 1);
@@ -1553,6 +1694,7 @@ function liveCurrentStep() {
 }
 
 function saveAll() {
+  saveCurrentStepDraft();
   syncCurrentSequenceMeta();
   apiFetch('/save', { method: 'POST', body: serialize() })
     .then(response => response.text())
@@ -1593,7 +1735,7 @@ function compactNumbers(numbers) {
   return ranges.join(',');
 }
 
-function expandSelection(text) {
+function expandNumericSelection(text) {
   const result = new Set();
   for (const part of String(text || '').split(',')) {
     const [a, b] = part.split('-').map(v => parseInt(v, 10));
@@ -1604,6 +1746,12 @@ function expandSelection(text) {
     }
   }
   return result;
+}
+
+function expandSelection(text) {
+  const requested = String(text || '').trim();
+  const namedGroup = ledGroups.find(group => group.name.toLowerCase() === requested.toLowerCase());
+  return expandNumericSelection(namedGroup ? namedGroup.leds : requested);
 }
 
 function secondsToMs(value, fallback) {

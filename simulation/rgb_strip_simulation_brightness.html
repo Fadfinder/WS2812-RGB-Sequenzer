@@ -8,7 +8,7 @@
     :root { font-family: system-ui, sans-serif; color: #172033; background: #eef2f7; }
     * { box-sizing: border-box; }
     body { margin: 0; background: #eef2f7; color: #172033; }
-    main { display: grid; grid-template-columns: 380px 1fr 340px; min-height: 100vh; }
+    main { display: grid; grid-template-columns: 420px 1fr; min-height: 100vh; }
     aside, section { padding: 18px; }
     aside { background: #182235; color: #f8fafc; }
     h1 { font-size: 22px; margin: 0 0 18px; }
@@ -31,6 +31,8 @@
     .sidebar-row button { flex: 1 1 0; padding-left: 8px; padding-right: 8px; }
     .sidebar-panel { margin-bottom: 18px; }
     .sidebar-panel label { display: block; margin-bottom: 8px; }
+    .check-row { display: flex !important; align-items: center; gap: 8px; }
+    .check-row input { width: 22px; }
     .panel { background: #fff; border: 1px solid #d7dee8; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
     .strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(30px, 1fr)); gap: 8px; max-height: 270px; overflow: auto; padding: 10px; background: #0f172a; border-radius: 8px; }
     .pixel { aspect-ratio: 1; border-radius: 50%; background: #1f2937; border: 2px solid #334155; color: #94a3b8; display: grid; place-items: center; font-size: 11px; font-weight: 800; }
@@ -42,6 +44,9 @@
     .step { display: grid; grid-template-columns: 1fr auto repeat(5, auto); gap: 8px; align-items: center; padding: 10px; background: #f8fafc; border: 1px solid #d7dee8; border-radius: 8px; }
     .step.active { outline: 3px solid #38bdf8; }
     .effects { display: grid; gap: 8px; }
+    .group-list { display: grid; gap: 6px; margin: 10px 0 18px; }
+    .group-item { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 8px 10px; background: #f8fafc; border: 1px solid #d7dee8; border-radius: 8px; }
+    .step-toolbar { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #d7dee8; }
     .effect { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 9px; background: #f8fafc; border: 1px solid #d7dee8; border-radius: 8px; }
     .status { min-height: 24px; color: #166534; font-weight: 800; }
     .muted { color: #64748b; font-size: 14px; }
@@ -55,7 +60,7 @@
     <h1>RGB Simulation</h1>
 
     <div class="sidebar-panel">
-      <h3>Streifen</h3>
+      <h3>Geraet</h3>
       <label>Name / WLAN
         <input id="deviceNameInput" maxlength="31" value="RGB-Sequencer">
       </label>
@@ -67,13 +72,6 @@
         <input id="apPasswordConfirmInput" type="text" minlength="8" maxlength="63" value="12345678">
       </label>
       <button class="ghost" onclick="applyPassword()">Kennwort uebernehmen</button>
-      <label>Anzahl LEDs
-        <input id="ledCountInput" type="number" min="1" max="50" value="50" onchange="changeLedCount()">
-      </label>
-      <div class="sidebar-row">
-        <button class="ghost" onclick="paintAll()">Alle setzen</button>
-        <button class="ghost" onclick="clearPaint()">Alle aus</button>
-      </div>
     </div>
 
     <div class="seq-list" id="sequenceList"></div>
@@ -84,6 +82,13 @@
       <button class="ghost" onclick="moveSequence(1)">Runter</button>
       <button class="danger" onclick="deleteSequence()">Loeschen</button>
     </div>
+    <div class="sidebar-panel">
+      <label>Sequenzname<input id="seqName" oninput="updateSequenceMeta()"></label>
+      <label class="check-row"><input id="seqEnabled" type="checkbox" onchange="updateSequenceMeta()"> Aktiv</label>
+      <label class="check-row"><input id="seqAutoDuration" type="checkbox" onchange="updateSequenceMeta()"> Dauer aus Schritten berechnen</label>
+      <label>Dauer Sekunden<input id="seqDuration" type="number" min="0.1" step="0.1" oninput="updateSequenceMeta()"></label>
+      <div id="seqDurationInfo" class="seq-meta"></div>
+    </div>
   </aside>
 
   <section>
@@ -93,56 +98,34 @@
     </div>
 
     <div class="panel">
-      <h2>Aktuellen Schritt bearbeiten</h2>
-      <div class="row">
-        <label style="flex: 1 1 220px">Schrittname
-          <input id="stepName" oninput="liveCurrentStep()">
-        </label>
-        <label style="width: 170px">Schrittdauer Sekunden
-          <input id="stepSeconds" type="number" min="0.02" step="0.1" value="1" oninput="liveCurrentStep()">
-        </label>
-        <label style="width: 210px">Zufallsdauer bis Sekunden
-          <input id="stepRandomSeconds" type="number" min="0" max="60" step="0.1" value="0" oninput="liveCurrentStep()">
-        </label>
-        <label style="width: 170px">Gesamthelligkeit %
-          <input id="stepBrightness" type="number" min="0" max="100" step="1" value="100" oninput="liveCurrentStep()">
-        </label>
-        <button class="primary" onclick="saveStep()">Schritt speichern</button>
-        <button onclick="newStep()">Neuer Schritt</button>
-        <button onclick="pasteStep()">Kopierten Schritt einfuegen</button>
-      </div>
-      <h3>LEDs fuer diesen Schritt</h3>
+      <h2>LEDs, Farben und Gruppen</h2>
       <div class="row" style="margin-bottom: 12px">
+        <label style="width: 150px">Anzahl LEDs<input id="ledCountInput" type="number" min="1" max="50" value="50" onchange="changeLedCount()"></label>
         <label style="width: 120px">Farbe
           <input id="stepColor" type="color" value="#ff0000" oninput="liveCurrentStep()">
         </label>
         <label style="width: 150px">Helligkeit %
           <input id="ledBrightness" type="number" min="0" max="100" step="1" value="100">
         </label>
+        <button onclick="paintAll()">Alle setzen</button>
+        <button onclick="clearPaint()">Alle aus</button>
       </div>
       <div class="led-grid" id="ledGrid"></div>
-    </div>
-
-    <div class="panel">
-      <h2>Sequenz bearbeiten</h2>
+      <h3>Benannte LED-Gruppen</h3>
       <div class="row">
-        <label style="flex: 1 1 260px">Name
-          <input id="seqName" oninput="updateSequenceMeta()">
-        </label>
-        <label style="width: 170px">Dauer Sequenz
-          <input id="seqDuration" type="number" min="0.1" step="0.1" oninput="updateSequenceMeta()">
-        </label>
-        <label style="width: 130px">Aktiv
-          <input id="seqEnabled" type="checkbox" onchange="updateSequenceMeta()">
-        </label>
+        <label style="flex:1 1 180px">Gruppenname<input id="ledGroupName" maxlength="24"></label>
+        <label style="flex:1 1 220px">LEDs<input id="ledGroupSelection" placeholder="1-4,8"></label>
+        <button onclick="useCurrentLedsForGroup()">Aktuelle LEDs</button>
+        <button onclick="saveLedGroup()">Gruppe speichern</button>
       </div>
+      <div id="ledGroupList" class="group-list"></div>
     </div>
 
     <div class="panel">
       <h2>Effekt fuer LED-Gruppe</h2>
       <div class="row">
-        <label style="width: 180px">LEDs
-          <input id="effectLeds" value="1-20">
+        <label style="width: 220px">LEDs oder Gruppenname
+          <input id="effectLeds" value="1-20" list="ledGroupNames"><datalist id="ledGroupNames"></datalist>
         </label>
         <label style="width: 180px">Effekt
           <select id="effectType">
@@ -194,6 +177,15 @@
 
     <div class="panel">
       <h2>Schritte dieser Sequenz</h2>
+      <div class="row step-toolbar">
+        <label style="flex:1 1 200px">Schrittname<input id="stepName" oninput="liveCurrentStep()"></label>
+        <label style="width:160px">Dauer Sekunden<input id="stepSeconds" type="number" min="0.02" step="0.1" value="1" oninput="liveCurrentStep()"></label>
+        <label style="width:190px">Zufallsdauer bis<input id="stepRandomSeconds" type="number" min="0" max="60" step="0.1" value="0" oninput="liveCurrentStep()"></label>
+        <label style="width:170px">Gesamthelligkeit %<input id="stepBrightness" type="number" min="0" max="100" step="1" value="100" oninput="liveCurrentStep()"></label>
+        <button class="primary" onclick="saveStep()">Schritt speichern</button>
+        <button onclick="newStep()">Neuer Schritt</button>
+        <button onclick="pasteStep()">Einfuegen</button>
+      </div>
       <div class="steps" id="steps"></div>
     </div>
   </section>
@@ -204,7 +196,7 @@
       <div class="row">
         <button class="primary" onclick="play()">Abspielen</button>
         <button onclick="stop()">Stop</button>
-        <button onclick="saveLocal()">Im Browser speichern</button>
+        <button onclick="saveLocal()">Speichern</button>
       </div>
       <p id="status" class="status"></p>
       <p class="muted">Diese Datei simuliert die Wemos-Weboberflaeche lokal im Browser. Deine Daten werden nur im Browser gespeichert.</p>
@@ -217,6 +209,7 @@ const MAX_LEDS = 50;
 let deviceName = 'RGB-Sequencer';
 let ledCount = 50;
 let playlist = [];
+let ledGroups = [];
 let selectedSequence = 0;
 let selectedStep = -1;
 let paintedColors = new Map();
@@ -231,6 +224,8 @@ const effectsEl = document.getElementById('effects');
 const seqName = document.getElementById('seqName');
 const seqDuration = document.getElementById('seqDuration');
 const seqEnabled = document.getElementById('seqEnabled');
+const seqAutoDuration = document.getElementById('seqAutoDuration');
+const seqDurationInfo = document.getElementById('seqDurationInfo');
 const stepName = document.getElementById('stepName');
 const stepSeconds = document.getElementById('stepSeconds');
 const stepRandomSeconds = document.getElementById('stepRandomSeconds');
@@ -247,13 +242,17 @@ const deviceNameInput = document.getElementById('deviceNameInput');
 const apPasswordInput = document.getElementById('apPasswordInput');
 const apPasswordConfirmInput = document.getElementById('apPasswordConfirmInput');
 const ledCountInput = document.getElementById('ledCountInput');
+const ledGroupName = document.getElementById('ledGroupName');
+const ledGroupSelection = document.getElementById('ledGroupSelection');
+const ledGroupList = document.getElementById('ledGroupList');
+const ledGroupNames = document.getElementById('ledGroupNames');
 let apPassword = '12345678';
 
 const EFFECT_TYPES = ['fire', 'storm', 'rainbow', 'welder', 'camera', 'police', 'sparkle', 'comet', 'theater', 'pulse', 'breathe', 'lava', 'randomOnOff', 'randomColor', 'randomOnOffColor', 'meteor', 'twinkle', 'candle', 'sunrise', 'sunset', 'scanner', 'confetti', 'aurora', 'toxic', 'heartbeat', 'fadeIn', 'fadeOut', 'transition', 'blink', 'running'];
 
 function defaultPlaylist() {
   return [
-    { name: 'Demo_Sequenz', durationMs: 304000, enabled: true, steps: [
+    { name: 'Demo_Sequenz', durationMs: 304000, enabled: true, autoDuration: false, steps: [
       { name: 'Weiss', durationMs: 7000, randomMaxMs: 0, groups: [{ leds: '1', color: '#ffffff' }], effects: [] },
       { name: 'Pause', durationMs: 2000, randomMaxMs: 0, groups: [], effects: [] },
       { name: 'Rot', durationMs: 7000, randomMaxMs: 0, groups: [{ leds: '1', color: '#ff0000' }], effects: [] },
@@ -382,13 +381,19 @@ function render() {
     el.className = `seq-item ${index === selectedSequence ? 'active' : ''}`;
     el.onclick = () => selectSequence(index);
     const state = item.enabled === false ? 'inaktiv' : 'aktiv';
-    el.innerHTML = `<div><strong>${escapeHtml(item.name || 'Sequenz')}</strong><div class="seq-meta">${state}, ${msToSeconds(item.durationMs)} s, ${item.steps.length} Schritte</div></div><div>${index + 1}</div>`;
+    const duration = item.autoDuration ? sequenceStepDuration(item) : item.durationMs;
+    el.innerHTML = `<div><strong>${escapeHtml(item.name || 'Sequenz')}</strong><div class="seq-meta">${state}, ${msToSeconds(duration)} s, ${item.steps.length} Schritte</div></div><div>${index + 1}</div>`;
     sequenceList.appendChild(el);
   });
 
   seqName.value = seq.name || '';
-  seqDuration.value = msToSeconds(seq.durationMs);
+  const calculatedDuration = sequenceStepDuration(seq);
+  seqDuration.value = msToSeconds(seq.autoDuration ? calculatedDuration : seq.durationMs);
   seqEnabled.checked = seq.enabled !== false;
+  seqAutoDuration.checked = seq.autoDuration === true;
+  seqDuration.disabled = seq.autoDuration === true;
+  seqDurationInfo.textContent = seq.autoDuration ? `Summe der Schritte: ${msToSeconds(calculatedDuration)} s` : '';
+  renderLedGroups();
   renderLedGrid();
   renderStrip();
   renderEffects();
@@ -518,6 +523,7 @@ function renderEffects() {
 }
 
 function selectSequence(index) {
+  saveCurrentStepDraft();
   stop();
   selectedSequence = index;
   selectedStep = -1;
@@ -529,7 +535,7 @@ function selectSequence(index) {
 function changeLedCount() {
   ledCount = clamp(parseInt(ledCountInput.value, 10) || 50, 1, MAX_LEDS);
   paintedColors = new Map([...paintedColors].filter(([led]) => led <= ledCount));
-  currentEffects = currentEffects.map(effect => ({ ...effect, leds: compactNumbers([...expandSelection(effect.leds)].filter(led => led <= ledCount)) }));
+  currentEffects = currentEffects.map(effect => ledGroups.some(group => group.name.toLowerCase() === String(effect.leds).toLowerCase()) ? effect : ({ ...effect, leds: compactNumbers([...expandSelection(effect.leds)].filter(led => led <= ledCount)) }));
   render();
 }
 
@@ -537,7 +543,8 @@ function syncCurrentSequenceMeta() {
   const seq = playlist[selectedSequence];
   if (!seq) return;
   seq.name = seqName.value;
-  seq.durationMs = secondsToMs(seqDuration.value, 10);
+  seq.autoDuration = seqAutoDuration.checked;
+  seq.durationMs = seq.autoDuration ? sequenceStepDuration(seq) : secondsToMs(seqDuration.value, 10);
   seq.enabled = seqEnabled.checked;
 }
 
@@ -545,6 +552,39 @@ function updateSequenceMeta() {
   syncCurrentSequenceMeta();
   render();
 }
+
+function sequenceStepDuration(seq) {
+  return Math.max(100, (seq.steps || []).reduce((sum, step) => sum + (Number(step.randomMaxMs) > 0 ? Number(step.randomMaxMs) : Number(step.durationMs || 0)), 0));
+}
+
+function renderLedGroups() {
+  ledGroupList.innerHTML = '';
+  ledGroupNames.innerHTML = '';
+  ledGroups.forEach((group, index) => {
+    const option = document.createElement('option'); option.value = group.name; ledGroupNames.appendChild(option);
+    const row = document.createElement('div'); row.className = 'group-item';
+    row.innerHTML = `<div><strong>${escapeHtml(group.name)}</strong><div class="muted">LEDs ${escapeHtml(group.leds)}</div></div><button onclick="applyLedGroup(${index})">Waehlen</button><button class="danger" onclick="deleteLedGroup(${index})">X</button>`;
+    ledGroupList.appendChild(row);
+  });
+  if (!ledGroups.length) ledGroupList.innerHTML = '<div class="muted">Noch keine LED-Gruppe gespeichert.</div>';
+}
+
+function useCurrentLedsForGroup() { ledGroupSelection.value = compactNumbers([...paintedColors.keys()]); }
+function saveLedGroup() {
+  const name = ledGroupName.value.trim().slice(0, 24);
+  const leds = compactNumbers([...expandNumericSelection(ledGroupSelection.value)]);
+  if (!name || !leds) return;
+  const index = ledGroups.findIndex(group => group.name.toLowerCase() === name.toLowerCase());
+  if (index >= 0) ledGroups[index] = { name, leds }; else ledGroups.push({ name, leds });
+  ledGroupName.value = ''; ledGroupSelection.value = ''; renderLedGroups();
+}
+function applyLedGroup(index) {
+  const group = ledGroups[index]; if (!group) return;
+  const paint = { color: stepColor.value.toLowerCase(), brightness: clamp(readNumber(ledBrightness.value, 100) / 100, 0, 1) };
+  for (const led of expandNumericSelection(group.leds)) paintedColors.set(led, paint);
+  renderLedGrid(); renderStrip();
+}
+function deleteLedGroup(index) { ledGroups.splice(index, 1); renderLedGroups(); }
 
 function toggleLed(index) {
   const color = stepColor.value.toLowerCase();
@@ -576,6 +616,7 @@ function liveCurrentStep() {
 }
 
 function newStep() {
+  saveCurrentStepDraft();
   stop();
   const seq = playlist[selectedSequence];
   const insertAt = selectedStep >= 0 ? selectedStep + 1 : seq.steps.length;
@@ -585,17 +626,24 @@ function newStep() {
 }
 
 function saveStep() {
-  const seq = playlist[selectedSequence];
-  const step = { name: stepName.value.trim(), durationMs: secondsToMs(stepSeconds.value, 1), randomMaxMs: secondsToOptionalMs(stepRandomSeconds.value), brightness: clamp(readNumber(stepBrightness.value, 100), 0, 100), groups: groupsFromMap(paintedColors), effects: currentEffects.map(effect => ({ ...effect })) };
-  if (selectedStep >= 0) seq.steps[selectedStep] = step;
-  else {
-    seq.steps.push(step);
-    selectedStep = seq.steps.length - 1;
-  }
+  saveCurrentStepDraft(true);
   render();
 }
 
+function saveCurrentStepDraft(createIfMissing = false) {
+  const seq = playlist[selectedSequence];
+  if (!seq) return;
+  const step = { name: stepName.value.trim(), durationMs: secondsToMs(stepSeconds.value, 1), randomMaxMs: secondsToOptionalMs(stepRandomSeconds.value), brightness: clamp(readNumber(stepBrightness.value, 100), 0, 100), groups: groupsFromMap(paintedColors), effects: currentEffects.map(effect => ({ ...effect })) };
+  if (selectedStep >= 0) seq.steps[selectedStep] = step;
+  else if (createIfMissing) {
+    seq.steps.push(step);
+    selectedStep = seq.steps.length - 1;
+  }
+  if (seq.autoDuration) seq.durationMs = sequenceStepDuration(seq);
+}
+
 function loadStep(index) {
+  if (index !== selectedStep) saveCurrentStepDraft();
   stop();
   const step = normalizeStep(playlist[selectedSequence].steps[index]);
   selectedStep = index;
@@ -611,7 +659,9 @@ function loadStep(index) {
 }
 
 function addEffect() {
-  const leds = compactNumbers([...expandSelection(effectLeds.value)]);
+  const requested = effectLeds.value.trim();
+  const namedGroup = ledGroups.find(group => group.name.toLowerCase() === requested.toLowerCase());
+  const leds = namedGroup ? namedGroup.name : compactNumbers([...expandSelection(requested)]);
   if (!leds) return;
   currentEffects.push({ leds, type: effectType.value, speed: clamp(readNumber(effectSpeed.value, 50), 0, 100), brightness: clamp(readNumber(effectBrightness.value, 100) / 100, 0, 1), color: effectColor.value });
   render();
@@ -627,12 +677,14 @@ function deleteEffect(index) {
 }
 
 function deleteStep(index) {
+  if (index !== selectedStep) saveCurrentStepDraft();
   playlist[selectedSequence].steps.splice(index, 1);
   selectedStep = -1;
   render();
 }
 
 function moveStep(index, direction) {
+  saveCurrentStepDraft();
   const steps = playlist[selectedSequence].steps;
   const target = index + direction;
   if (target < 0 || target >= steps.length) return;
@@ -651,6 +703,7 @@ function copyStep(index) {
 }
 
 function pasteStep(afterIndex = selectedStep) {
+  saveCurrentStepDraft();
   if (!copiedStep) return;
   const steps = playlist[selectedSequence].steps;
   const insertAt = afterIndex >= 0 ? afterIndex + 1 : steps.length;
@@ -661,7 +714,8 @@ function pasteStep(afterIndex = selectedStep) {
 }
 
 function addSequence() {
-  playlist.splice(selectedSequence + 1, 0, { name: 'Neue Sequenz', durationMs: 10000, enabled: true, steps: [] });
+  saveCurrentStepDraft();
+  playlist.splice(selectedSequence + 1, 0, { name: 'Neue Sequenz', durationMs: 10000, enabled: true, autoDuration: true, steps: [] });
   selectedSequence += 1;
   selectedStep = -1;
   paintedColors.clear();
@@ -670,6 +724,7 @@ function addSequence() {
 }
 
 function deleteSequence() {
+  saveCurrentStepDraft();
   if (playlist.length <= 1) return;
   playlist.splice(selectedSequence, 1);
   selectedSequence = Math.max(0, selectedSequence - 1);
@@ -705,14 +760,16 @@ function stop(updateStatus = true) {
 }
 
 function saveLocal() {
+  saveCurrentStepDraft();
   syncCurrentSequenceMeta();
-  localStorage.setItem('rgb-sim-playlist', JSON.stringify({ deviceName, apPassword, ledCount, playlist }));
+  localStorage.setItem('rgb-sim-playlist', JSON.stringify({ deviceName, apPassword, ledCount, ledGroups, playlist }));
   statusEl.textContent = 'Im Browser gespeichert';
 }
 
 function parseStored(text) {
   const list = [];
   let current = null;
+  ledGroups = [];
   deviceName = 'RGB-Sequencer';
   apPassword = '12345678';
   for (const raw of text.split('\n')) {
@@ -730,10 +787,15 @@ function parseStored(text) {
       ledCount = clamp(parseInt(line.replace('#COUNT', '').trim(), 10) || 50, 1, MAX_LEDS);
       continue;
     }
+    if (line.startsWith('#GROUP')) {
+      const fields = line.replace('#GROUP', '').trim().split('|');
+      if (fields[0] && fields[1]) ledGroups.push({ name: fields[0].trim().slice(0, 24), leds: fields.slice(1).join('|').trim() });
+      continue;
+    }
     if (line.startsWith('#SEQ')) {
       const body = line.replace('#SEQ', '').trim();
-      const [name, duration, enabled] = body.split('|');
-      current = { name: name || 'Sequenz', durationMs: parseInt(duration, 10) || 10000, enabled: enabled !== '0', steps: [] };
+      const [name, duration, enabled, autoDuration] = body.split('|');
+      current = { name: name || 'Sequenz', durationMs: parseInt(duration, 10) || 10000, enabled: enabled !== '0', autoDuration: autoDuration === '1', steps: [] };
       list.push(current);
       continue;
     }
@@ -775,7 +837,8 @@ function parseStored(text) {
 
 function serialize() {
   const body = playlist.map(seq => {
-    const header = `#SEQ ${seq.name || 'Sequenz'}|${Math.max(100, Math.round(seq.durationMs || 10000))}|${seq.enabled === false ? 0 : 1}`;
+    const duration = seq.autoDuration ? sequenceStepDuration(seq) : Math.max(100, Math.round(seq.durationMs || 10000));
+    const header = `#SEQ ${seq.name || 'Sequenz'}|${duration}|${seq.enabled === false ? 0 : 1}|${seq.autoDuration ? 1 : 0}`;
     const lines = seq.steps.map(step => {
       step = normalizeStep(step);
       const colorGroups = step.groups.map(group => `${group.color.replace('#', '').toUpperCase()}@${clamp(Number(group.brightness ?? 1), 0, 1)}:${group.leds || ''}`);
@@ -787,7 +850,8 @@ function serialize() {
     });
     return [header, ...lines].join('\n');
   }).join('\n\n');
-  return `#NAME ${normalizeDeviceName(deviceName)}\n#PASS ${normalizePassword(apPassword)}\n#COUNT ${ledCount}\n${body}`;
+  const groupLines = ledGroups.map(group => `#GROUP ${group.name}|${group.leds}`).join('\n');
+  return `#NAME ${normalizeDeviceName(deviceName)}\n#PASS ${normalizePassword(apPassword)}\n#COUNT ${ledCount}\n${groupLines}${groupLines ? '\n' : ''}${body}`;
 }
 
 function loadLocal() {
@@ -797,6 +861,7 @@ function loadLocal() {
     deviceName = normalizeDeviceName(data.deviceName || 'RGB-Sequencer');
     apPassword = normalizePassword(data.apPassword || '12345678');
     ledCount = clamp(data.ledCount || 50, 1, MAX_LEDS);
+    ledGroups = Array.isArray(data.ledGroups) ? data.ledGroups : [];
     playlist = ensureDemoSequenceInPlaylist(Array.isArray(data.playlist) && data.playlist.length ? data.playlist : defaultPlaylist());
     playlist.forEach(seq => seq.steps = (seq.steps || []).map(step => {
       step = normalizeStep(step);
@@ -825,7 +890,7 @@ function compactNumbers(numbers) {
   return ranges.join(',');
 }
 
-function expandSelection(text) {
+function expandNumericSelection(text) {
   const result = new Set();
   for (const part of String(text || '').split(',')) {
     const [a, b] = part.split('-').map(v => parseInt(v, 10));
@@ -836,6 +901,12 @@ function expandSelection(text) {
     }
   }
   return result;
+}
+
+function expandSelection(text) {
+  const requested = String(text || '').trim();
+  const namedGroup = ledGroups.find(group => group.name.toLowerCase() === requested.toLowerCase());
+  return expandNumericSelection(namedGroup ? namedGroup.leds : requested);
 }
 
 function secondsToMs(value, fallback) {
