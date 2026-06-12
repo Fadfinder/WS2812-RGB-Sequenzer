@@ -787,18 +787,20 @@ String demoSequenceBlock(bool enabled = true) {
 
 void ensureDemoSequence() {
   bool demoEnabled = true;
+  bool demoStateFound = false;
   int demoStart = playlistText.indexOf("#SEQ Demo_Sequenz|");
-  if (demoStart >= 0) {
+  while (demoStart >= 0) {
     int demoLineEnd = playlistText.indexOf('\n', demoStart);
     if (demoLineEnd < 0) demoLineEnd = playlistText.length();
     String demoHeader = playlistText.substring(demoStart, demoLineEnd);
     int firstSep = demoHeader.indexOf('|');
     int demoEnabledSep = firstSep >= 0 ? demoHeader.indexOf('|', firstSep + 1) : -1;
-    if (demoEnabledSep >= 0) {
+    if (!demoStateFound && demoEnabledSep >= 0) {
       int enabledEnd = demoHeader.indexOf('|', demoEnabledSep + 1);
       String enabledText = demoHeader.substring(demoEnabledSep + 1, enabledEnd >= 0 ? enabledEnd : demoHeader.length());
       enabledText.trim();
       demoEnabled = enabledText != "0";
+      demoStateFound = true;
     }
 
     int nextSequence = playlistText.indexOf("\n#SEQ ", demoStart + 1);
@@ -807,6 +809,7 @@ void ensureDemoSequence() {
     } else {
       playlistText = playlistText.substring(0, demoStart);
     }
+    demoStart = playlistText.indexOf("#SEQ Demo_Sequenz|");
   }
   String demo = demoSequenceBlock(demoEnabled);
   int firstSequence = playlistText.indexOf("#SEQ ");
@@ -963,9 +966,11 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
 
       <h3>Effekte im aktuellen Schritt</h3>
       <div class="row">
-        <label style="width: 220px">LEDs oder Gruppenname
-          <input id="effectLeds" value="1-20" list="ledGroupNames" />
-          <datalist id="ledGroupNames"></datalist>
+        <label style="width: 220px">LED-Gruppe
+          <select id="effectGroupSelect" onchange="selectEffectGroup()"><option value="">Eigene LED-Auswahl</option></select>
+        </label>
+        <label style="width: 180px">LEDs
+          <input id="effectLeds" value="1-20" />
         </label>
         <label style="width: 180px">Effekt
           <select id="effectType">
@@ -1067,6 +1072,7 @@ const stepBrightness = document.getElementById('stepBrightness');
 const stepColor = document.getElementById('stepColor');
 const ledBrightness = document.getElementById('ledBrightness');
 const effectLeds = document.getElementById('effectLeds');
+const effectGroupSelect = document.getElementById('effectGroupSelect');
 const effectType = document.getElementById('effectType');
 const effectSpeed = document.getElementById('effectSpeed');
 const effectColor = document.getElementById('effectColor');
@@ -1079,7 +1085,6 @@ const ledCountInput = document.getElementById('ledCountInput');
 const ledGroupName = document.getElementById('ledGroupName');
 const ledGroupSelection = document.getElementById('ledGroupSelection');
 const ledGroupList = document.getElementById('ledGroupList');
-const ledGroupNames = document.getElementById('ledGroupNames');
 let apPassword = '12345678';
 
 const EFFECT_TYPES = ['fire', 'storm', 'rainbow', 'welder', 'camera', 'police', 'sparkle', 'comet', 'theater', 'pulse', 'breathe', 'lava', 'randomOnOff', 'randomColor', 'randomOnOffColor', 'meteor', 'twinkle', 'candle', 'sunrise', 'sunset', 'scanner', 'confetti', 'aurora', 'toxic', 'heartbeat', 'fadeIn', 'fadeOut', 'transition', 'blink', 'running'];
@@ -1458,17 +1463,24 @@ function updateSequenceMeta() {
 
 function renderLedGroups() {
   ledGroupList.innerHTML = '';
-  ledGroupNames.innerHTML = '';
+  const selectedGroup = effectGroupSelect.value;
+  effectGroupSelect.innerHTML = '<option value="">Eigene LED-Auswahl</option>';
   ledGroups.forEach((group, index) => {
     const option = document.createElement('option');
     option.value = group.name;
-    ledGroupNames.appendChild(option);
+    option.textContent = `${group.name} (${group.leds})`;
+    effectGroupSelect.appendChild(option);
     const row = document.createElement('div');
     row.className = 'group-item';
     row.innerHTML = `<div><strong>${escapeHtml(group.name)}</strong><div class="muted">LEDs ${escapeHtml(group.leds)}</div></div><button onclick="applyLedGroup(${index})">Waehlen</button><button class="danger" onclick="deleteLedGroup(${index})">X</button>`;
     ledGroupList.appendChild(row);
   });
+  if (ledGroups.some(group => group.name === selectedGroup)) effectGroupSelect.value = selectedGroup;
   if (!ledGroups.length) ledGroupList.innerHTML = '<div class="muted">Noch keine LED-Gruppe gespeichert.</div>';
+}
+
+function selectEffectGroup() {
+  if (effectGroupSelect.value) effectLeds.value = effectGroupSelect.value;
 }
 
 function useCurrentLedsForGroup() {
@@ -1577,7 +1589,7 @@ function loadStep(index) {
 }
 
 function addEffect() {
-  const requested = effectLeds.value.trim();
+  const requested = effectGroupSelect.value || effectLeds.value.trim();
   const namedGroup = ledGroups.find(group => group.name.toLowerCase() === requested.toLowerCase());
   const leds = namedGroup ? namedGroup.name : compactNumbers([...expandSelection(requested)]);
   if (!leds) return;
