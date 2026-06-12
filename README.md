@@ -127,6 +127,20 @@ anstelle einer LED-Liste bei Effekten verwendet werden. Sequenzen koennen ihre D
 wahlweise automatisch aus der Summe ihrer Schritte berechnen. Aenderungen am aktuell
 bearbeiteten Schritt werden beim Wechsel zu einem anderen Schritt automatisch
 uebernommen; `Speichern` schreibt das gesamte Projekt dauerhaft in den Wemos-Flash.
+Die Schrittdauer kann auch direkt in der Schrittliste geaendert werden. Ist die
+automatische Sequenzdauer aktiviert, werden der gespeicherte Wert und die Anzeige
+bei jeder Aenderung sofort aktualisiert. `Abspielen` startet am aktuell ausgewaehlten
+Schritt; die Schaltflaechen `Abspielen`, `Stop` und `Speichern` bleiben beim Scrollen
+auch auf mobilen Geraeten sichtbar.
+
+## Benutzerhandbuch
+
+Das vollstaendige deutsche Benutzerhandbuch mit Verdrahtungsplan, Einrichtung,
+Bedienung und Fehlersuche befindet sich hier:
+
+```text
+docs/WS2812_RGB_Sequenzer_Benutzerhandbuch.pdf
+```
 
 Standard-Datenpin:
 

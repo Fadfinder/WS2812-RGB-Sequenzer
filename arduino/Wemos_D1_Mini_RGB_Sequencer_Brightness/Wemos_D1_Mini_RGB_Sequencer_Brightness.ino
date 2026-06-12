@@ -845,8 +845,8 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
     :root { font-family: system-ui, sans-serif; color: #172033; background: #eef2f7; }
     * { box-sizing: border-box; }
     body { margin: 0; background: #eef2f7; color: #172033; }
-    main { display: grid; grid-template-columns: 420px 1fr; min-height: 100vh; }
-    aside, section { padding: 18px; }
+    main { display: grid; grid-template-columns: 420px 1fr; min-height: 100vh; min-width: 0; }
+    aside, section { padding: 18px; min-width: 0; }
     aside { background: #182235; color: #f8fafc; }
     h1 { font-size: 22px; margin: 0 0 18px; }
     h2 { font-size: 18px; margin: 0 0 12px; }
@@ -872,12 +872,16 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
     .check-row input { width: 22px; min-height: 22px; }
     .compact-actions { margin: 10px 0 14px; }
     .panel { background: #fff; border: 1px solid #d7dee8; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+    .control-bar { position: fixed; top: 0; left: 420px; right: 0; z-index: 1000; margin: 0; border-radius: 0; box-shadow: 0 3px 12px rgba(15, 23, 42, .18); }
+    section { padding-top: 96px; }
     .led-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 8px; max-height: 45vh; overflow: auto; padding: 2px; -webkit-overflow-scrolling: touch; }
     .led-btn { min-height: 48px; border: 2px solid #cbd5e1; background: #f8fafc; }
     .led-btn.on { color: #fff; border-color: #111827; }
     .steps { display: grid; gap: 8px; }
     .step { display: grid; grid-template-columns: 1fr auto repeat(5, auto); gap: 8px; align-items: center; padding: 10px; background: #f8fafc; border: 1px solid #d7dee8; border-radius: 8px; }
     .step.active { outline: 3px solid #38bdf8; }
+    .step-duration { width: 92px; }
+    .step-duration input { min-height: 38px; padding: 7px; }
     .effects { display: grid; gap: 8px; }
     .group-list { display: grid; gap: 6px; margin: 10px 0 18px; }
     .group-item { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 8px 10px; background: #f8fafc; border: 1px solid #d7dee8; border-radius: 8px; }
@@ -886,7 +890,7 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
     .status { min-height: 24px; color: #166534; font-weight: 800; }
     .muted { color: #64748b; font-size: 14px; }
     .swatch { display: inline-block; width: 18px; height: 18px; border-radius: 4px; border: 1px solid #475569; vertical-align: middle; margin-right: 6px; }
-    @media (max-width: 1050px) { main { grid-template-columns: 1fr; } aside { order: 1; } section { order: 2; } }
+    @media (max-width: 1050px) { main { grid-template-columns: minmax(0, 1fr); } aside { order: 1; padding-top: 92px; } section { order: 2; padding-top: 18px; } .control-bar { left: 0; } }
     @media (max-width: 640px) {
       body { font-size: 16px; }
       aside, section { padding: 12px; }
@@ -897,10 +901,12 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
       .row label, .sidebar-row button { width: 100% !important; }
       .led-grid { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); max-height: 38vh; }
       .led-btn { min-height: 52px; }
-      .step { grid-template-columns: 1fr repeat(5, 44px); gap: 6px; }
-      .step > div:nth-child(2) { grid-column: 1 / -1; }
+      .step { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+      .step > div:first-child { grid-column: 1 / -1; min-width: 0; overflow-wrap: anywhere; }
+      .step-duration { grid-column: 1 / -1; width: 100%; }
       .effect { grid-template-columns: 1fr; }
       .effect input, .effect button { width: 100%; }
+      body { overflow-x: hidden; }
     }
   </style>
 </head>
@@ -935,7 +941,7 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
   </aside>
 
   <section>
-    <div class="panel">
+    <div class="panel control-bar">
       <div class="row">
         <button class="primary" onclick="playPlaylist()">Abspielen</button>
         <button onclick="stopPlaylist()">Stop</button>
@@ -1024,7 +1030,7 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
       <h2>Schritte dieser Sequenz</h2>
       <div class="row step-toolbar">
         <label style="flex: 1 1 200px">Schrittname<input id="stepName" oninput="liveCurrentStep()" /></label>
-        <label style="width: 160px">Dauer Sekunden<input id="stepSeconds" type="number" min="0.02" step="0.1" value="1" oninput="liveCurrentStep()" /></label>
+        <label style="width: 160px">Dauer Sekunden<input id="stepSeconds" type="number" min="0.02" step="0.1" value="1" oninput="updateCurrentStepDuration()" /></label>
         <label style="width: 190px">Zufallsdauer bis<input id="stepRandomSeconds" type="number" min="0" max="60" step="0.1" value="0" oninput="liveCurrentStep()" /></label>
         <label style="width: 170px">Gesamthelligkeit %<input id="stepBrightness" type="number" min="0" max="100" step="1" value="100" oninput="liveCurrentStep()" /></label>
         <button class="primary" onclick="saveStep()">Schritt speichern</button>
@@ -1271,6 +1277,7 @@ function parseStored(text) {
 }
 
 function serialize() {
+  refreshAutoDurations();
   const body = playlist.map(seq => {
     const duration = seq.autoDuration ? sequenceStepDuration(seq) : Math.max(100, Math.round(seq.durationMs || 10000));
     const header = `#SEQ ${seq.name || 'Sequenz'}|${duration}|${seq.enabled === false ? 0 : 1}|${seq.autoDuration ? 1 : 0}`;
@@ -1294,7 +1301,14 @@ function sequenceStepDuration(seq) {
   return Math.max(100, (seq.steps || []).reduce((sum, step) => sum + (Number(step.randomMaxMs) > 0 ? Number(step.randomMaxMs) : Number(step.durationMs || 0)), 0));
 }
 
+function refreshAutoDurations() {
+  playlist.forEach(seq => {
+    if (seq.autoDuration) seq.durationMs = sequenceStepDuration(seq);
+  });
+}
+
 function render() {
+  refreshAutoDurations();
   deviceNameInput.value = normalizeDeviceName(deviceName);
   apPasswordInput.value = normalizePassword(apPassword);
   apPasswordConfirmInput.value = normalizePassword(apPassword);
@@ -1403,7 +1417,7 @@ function renderSteps() {
     row.onclick = () => loadStep(index);
     row.innerHTML = `
       <div><strong>${escapeHtml(stepTitle(step, index))}</strong><div class="muted">${escapeHtml(stepText(step))}</div></div>
-      <div>${msToSeconds(step.durationMs)} s</div>
+      <label class="step-duration" onclick="event.stopPropagation()"><input data-step-duration="${index}" type="number" min="0.02" step="0.1" value="${msToSeconds(step.durationMs)}" onchange="updateStepDuration(${index}, this.value)" aria-label="Dauer Schritt ${index + 1}"></label>
       <button class="icon" onclick="event.stopPropagation(); copyStep(${index})">⧉</button>
       <button class="icon" onclick="event.stopPropagation(); pasteStep(${index})">＋</button>
       <button class="icon" onclick="event.stopPropagation(); moveStep(${index}, -1)">↑</button>
@@ -1427,6 +1441,34 @@ function renderEffects() {
     row.innerHTML = `<div><strong>${effectName(effect.type)}</strong><div class="muted">LEDs ${escapeHtml(effect.leds || 'keine')}${colorText}</div></div><label class="muted">Speed 0-100 <input type="number" min="0" max="100" step="1" value="${effect.speed ?? 50}" oninput="updateEffectSpeed(${index}, this.value)"></label><label class="muted">Helligkeit % <input type="number" min="0" max="100" step="1" value="${Math.round((effect.brightness ?? 1) * 100)}" oninput="updateEffectBrightness(${index}, this.value)"></label>${colorInput}<button class="danger" onclick="deleteEffect(${index})">X</button>`;
     effectsEl.appendChild(row);
   });
+}
+
+function updateStepDuration(index, value) {
+  saveCurrentStepDraft();
+  const seq = playlist[selectedSequence];
+  if (!seq?.steps[index]) return;
+  seq.steps[index].durationMs = secondsToMs(value, 1);
+  if (index === selectedStep) stepSeconds.value = msToSeconds(seq.steps[index].durationMs);
+  if (seq.autoDuration) seq.durationMs = sequenceStepDuration(seq);
+  render();
+  if (index === selectedStep) liveCurrentStep();
+}
+
+function updateCurrentStepDuration() {
+  const seq = playlist[selectedSequence];
+  if (seq && selectedStep >= 0 && seq.steps[selectedStep]) {
+    seq.steps[selectedStep].durationMs = secondsToMs(stepSeconds.value, 1);
+    const listInput = stepsEl.querySelector(`[data-step-duration="${selectedStep}"]`);
+    if (listInput) listInput.value = msToSeconds(seq.steps[selectedStep].durationMs);
+    if (seq.autoDuration) {
+      seq.durationMs = sequenceStepDuration(seq);
+      seqDuration.value = msToSeconds(seq.durationMs);
+      seqDurationInfo.textContent = `Summe der Schritte: ${msToSeconds(seq.durationMs)} s`;
+      const meta = sequenceList.children[selectedSequence]?.querySelector('.seq-meta');
+      if (meta) meta.textContent = `${seq.enabled === false ? 'inaktiv' : 'aktiv'}, ${msToSeconds(seq.durationMs)} s, ${seq.steps.length} Schritte`;
+    }
+  }
+  liveCurrentStep();
 }
 
 function selectSequence(index) {
@@ -1715,9 +1757,12 @@ function saveAll() {
 }
 
 function playPlaylist() {
-  const firstStep = playlist[0]?.steps[0];
-  if (firstStep) renderStrip(firstStep);
-  apiFetch('/play')
+  saveCurrentStepDraft();
+  syncCurrentSequenceMeta();
+  const sequence = clamp(selectedSequence, 0, Math.max(0, playlist.length - 1));
+  const step = clamp(selectedStep >= 0 ? selectedStep : 0, 0, Math.max(0, (playlist[sequence]?.steps.length || 1) - 1));
+  apiFetch('/save', { method: 'POST', body: serialize() })
+    .then(() => apiFetch(`/play?sequence=${sequence}&step=${step}`))
     .then(response => response.text())
     .then(text => { statusEl.textContent = text; })
     .catch(() => { statusEl.textContent = 'Abspielen fehlgeschlagen'; });
@@ -1878,10 +1923,15 @@ void handlePlay() {
   playbackRunning = true;
   liveUntil = 0;
   liveGroups = "";
-  currentSequence = 0;
-  startCurrentSequence();
+  uint8_t requestedSequence = constrain(server.arg("sequence").toInt(), 0, max(0, (int)sequenceCount - 1));
+  currentSequence = requestedSequence;
+  Sequence& seq = sequences[currentSequence];
+  currentStepOffset = constrain(server.arg("step").toInt(), 0, max(0, (int)seq.stepCount - 1));
+  sequenceStartedAt = millis();
+  if (seq.stepCount > 0) startStep(steps[seq.firstStep + currentStepOffset]);
+  else startCurrentSequence();
   addDefaultHeaders();
-  server.send(200, "text/plain", "Abspielen gestartet.");
+  server.send(200, "text/plain", "Abspielen ab ausgewaehltem Schritt gestartet.");
 }
 
 void handleStop() {
