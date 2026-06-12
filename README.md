@@ -104,6 +104,24 @@ arduino/Wemos_D1_Mini_RGB_Sequencer_Fade/Wemos_D1_Mini_RGB_Sequencer_Fade.ino
 In dieser Variante dauern `Fade-In` und `Fade-Out` jeweils genau so lange wie die
 eingestellte Schrittdauer.
 
+Neue erweiterte Variante mit getrennten Effektgeschwindigkeiten, proportionaler
+Schritthelligkeit, Helligkeit pro LED-Farbzuweisung sowie Farbübergang, Blinklicht
+und Lauflicht:
+
+```text
+arduino/Wemos_D1_Mini_RGB_Sequencer_Brightness/Wemos_D1_Mini_RGB_Sequencer_Brightness.ino
+```
+
+Die zugehoerige Simulation bleibt ebenfalls als eigene Datei erhalten:
+
+```text
+simulation/rgb_strip_simulation_brightness.html
+```
+
+Die Schritthelligkeit wirkt als Faktor und ueberschreibt die Einzelwerte nicht.
+Beispiel: 60 Prozent LED-Helligkeit bei 50 Prozent Schritthelligkeit ergeben
+effektiv 30 Prozent.
+
 Standard-Datenpin:
 
 ```cpp
