@@ -894,6 +894,7 @@ const char INDEX_HTML[] PROGMEM = R"LEDSEQPAGE(
     @media (max-width: 640px) {
       body { font-size: 16px; }
       aside, section { padding: 12px; }
+      .control-bar { position: static; margin-bottom: 16px; border-radius: 10px; box-shadow: none; }
       h1 { font-size: 21px; margin-bottom: 12px; }
       h2 { font-size: 17px; }
       .panel { padding: 12px; margin-bottom: 12px; }
